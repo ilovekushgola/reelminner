@@ -16,6 +16,7 @@ import csv
 import json
 import queue
 import random
+import sys
 import threading
 import time
 from dataclasses import asdict, dataclass
@@ -674,6 +675,13 @@ def _print_table(results: List[ReelData]) -> None:
 
 
 def main() -> None:
+    # Windows consoles default to cp1252 and crash on emoji/Unicode chars
+    # (e.g. mathematical-bold usernames). Make stdout Unicode-safe.
+    try:
+        sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+    except Exception:
+        pass
+
     import argparse
 
     parser = argparse.ArgumentParser(

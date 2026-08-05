@@ -146,3 +146,16 @@ def parse_music_from_html(page_html: str) -> dict:
         result["original"] = True
         result["title"] = "Original audio"
     return result
+
+
+def parse_counts_from_html(page_html: str) -> dict:
+    def num(pat: str) -> str:
+        m = re.search(pat, page_html)
+        return m.group(1) if m else ""
+
+    return {
+        "likes": num(r'"like_count"\s*:\s*(\d+)'),
+        "comments": num(r'"comment_count"\s*:\s*(\d+)'),
+        "plays": num(r'"play_count"\s*:\s*(\d+)')
+        or num(r'"video_play_count"\s*:\s*(\d+)'),
+    }

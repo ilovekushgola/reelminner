@@ -60,6 +60,14 @@ BROWSER_ARGS = [
     "--no-default-browser-check",
 ]
 
+
+def backoff_delay(consecutive_failures: int, base: float = 2.0, cap: float = 30.0) -> float:
+    """Exponential cool-down (s) after N consecutive failed reels."""
+    if consecutive_failures <= 0:
+        return 0.0
+    return min(cap, base * (2 ** (consecutive_failures - 1)))
+
+
 # ----------------------------------------------------------------------------
 # Data model
 # ----------------------------------------------------------------------------
@@ -397,6 +405,7 @@ class InstagramReelScraper:
                         viewport={"width": 1280, "height": 900},
                         locale="en-US",
                     )
+                    fail_streak = 0
                     while True:
                         try:
                             url = q.get_nowait()
@@ -414,8 +423,18 @@ class InstagramReelScraper:
                             results.append(data)
                         if progress_cb:
                             progress_cb(len(results), total)
-                        # human-like pause between reels
-                        time.sleep(self.delay + random.uniform(0, 1.5))
+                        fail_streak = fail_streak + 1 if data.status != "ok" else 0
+                        wait = (
+                            self.delay
+                            + random.uniform(0, 1.5)
+                            + backoff_delay(fail_streak)
+                        )
+                        if fail_streak >= 2:
+                            self.log(
+                                f"    worker {wid}: {fail_streak} failures in a row, "
+                                f"cooling down {wait:.1f}s"
+                            )
+                        time.sleep(wait)
                     context.close()
                     browser.close()
             except Exception as e:  # pragma: no cover - defensive

@@ -1,0 +1,12 @@
+# session / output files
+storage_state.json
+results/
+*.csv
+*.xlsx
+*.json
+
+# python
+__pycache__/
+*.pyc
+.venv/
+venv/

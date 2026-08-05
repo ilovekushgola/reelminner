@@ -78,3 +78,71 @@ def parse_video_url_from_html(page_html: str) -> str:
             return v
     m = re.search(r'"contentUrl"\s*:\s*"([^"]+)"', page_html)
     return m.group(1) if m else ""
+
+
+def _extract_json_object(page_html: str, key: str) -> dict | None:
+    """Find `"key": { ... }` and parse the object with brace matching.
+
+    Handles escaped quotes and literal braces inside string values, which a
+    naive regex cannot. Returns None when the key or a well-formed object is
+    not found.
+    """
+    idx = 0
+    while True:
+        idx = page_html.find(f'"{key}"', idx)
+        if idx == -1:
+            return None
+        j = page_html.find(":", idx + len(key) + 2)
+        if j == -1:
+            return None
+        k = j + 1
+        while k < len(page_html) and page_html[k] in " \t\r\n":
+            k += 1
+        if k < len(page_html) and page_html[k] == "{":
+            depth, in_str, esc = 0, False, False
+            for p in range(k, len(page_html)):
+                ch = page_html[p]
+                if in_str:
+                    if esc:
+                        esc = False
+                    elif ch == "\\":
+                        esc = True
+                    elif ch == '"':
+                        in_str = False
+                else:
+                    if ch == '"':
+                        in_str = True
+                    elif ch == "{":
+                        depth += 1
+                    elif ch == "}":
+                        depth -= 1
+                        if depth == 0:
+                            try:
+                                return json.loads(page_html[k : p + 1])
+                            except Exception:
+                                return None
+            return None
+        idx += len(key)
+    return None
+
+
+_AUDIO_HREF_RE = re.compile(r'href=["\']/reels/audio/([\w-]+)/["\']')
+
+
+def parse_music_from_html(page_html: str) -> dict:
+    """Return {title, artist, original, audio_page_url} for the reel's music."""
+    result = {"title": "", "artist": "", "original": False, "audio_page_url": ""}
+
+    obj = _extract_json_object(page_html, "music_asset_info")
+    if obj:
+        result["title"] = (obj.get("title") or "").strip()
+        result["artist"] = (obj.get("display_artist") or "").strip()
+
+    m = _AUDIO_HREF_RE.search(page_html)
+    if m:
+        result["audio_page_url"] = "https://www.instagram.com/reels/audio/" + m.group(1) + "/"
+
+    if not result["title"] and re.search(r"Original audio", page_html):
+        result["original"] = True
+        result["title"] = "Original audio"
+    return result

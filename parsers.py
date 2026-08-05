@@ -9,7 +9,7 @@ from __future__ import annotations
 import html as htmlmod
 import json
 import re
-from datetime import datetime
+from datetime import datetime, timezone
 
 REEL_URL_RE = re.compile(
     r"https?://(?:www\.)?instagram\.com/(reel|reels|p)/([\w-]+)", re.IGNORECASE
@@ -46,26 +46,54 @@ def meta_content(page_html: str, attr: str, value: str) -> str:
     return ""
 
 
+def looks_like_handle(s: str) -> bool:
+    """True when s looks like an IG handle: 1-30 chars of [\\w.] only."""
+    return bool(re.fullmatch(r"[\w.]{1,30}", s or ""))
+
+
 def parse_username_from_html(page_html: str) -> str:
     og_title = meta_content(page_html, "property", "og:title")
+    # 1. display name with @handle in parens: "Name (@handle) on Instagram"
+    m = re.search(r"\(@([\w.]+)\)", og_title)
+    if m:
+        return m.group(1).strip()
+    # 2. plain handle in og:title
     m = re.match(r"^\s*([^|]+?)\s+on Instagram", og_title)
     if m:
         return m.group(1).strip()
-    # caption-style fallbacks: '<username> on <Month D, YYYY>' (profile-less
-    # reels) — checked against both meta kinds that carry the caption.
+    # caption-style fallbacks, checked against both meta kinds that carry it
     for desc in (
         meta_content(page_html, "name", "description"),
         meta_content(page_html, "property", "og:description"),
     ):
-        m = re.match(r"^\s*([\w.]+)\s*\(@", desc)
+        # 3. "@handle" reference
+        m = re.search(r"\(@([\w.]+)\)", desc)
         if m:
             return m.group(1).strip()
+        # 4. "35 likes, 0 comments - handle on <Month D, YYYY>: ..."
+        m = re.match(
+            r"^\s*[\d,.]+\s*(?:like|view)s?[^:]*-\s*([\w.]+)\s+on\s+"
+            r"[A-Z][a-z]+\s+\d{1,2},\s+\d{4}",
+            desc,
+        )
+        if m:
+            return m.group(1).strip()
+        # 5. "<handle> on <Month D, YYYY>" (profile-less reels)
         m = re.match(r"^\s*([\w.]+)\s+on\s+[A-Z][a-z]+\s+\d{1,2},\s+\d{4}", desc)
         if m:
             return m.group(1).strip()
+        # 6. "<handle> on Instagram"
         m = re.match(r"^\s*([\w.]+)\s+on Instagram", desc)
         if m:
             return m.group(1).strip()
+    # 7. JSON-LD / embedded JSON: owner.username
+    m = re.search(r'"owner"\s*:\s*\{\s*"username"\s*:\s*"([\w.]+)"', page_html)
+    if m:
+        return m.group(1).strip()
+    # 8. generic embedded JSON username
+    m = re.search(r'"username"\s*:\s*"([\w.]+)"', page_html)
+    if m:
+        return m.group(1).strip()
     return ""
 
 
@@ -89,6 +117,12 @@ def parse_uploaded_at_from_html(page_html: str) -> str:
             return datetime.strptime(m.group(1), "%B %d, %Y").strftime("%Y-%m-%d")
         except ValueError:
             return ""
+    # JSON-LD / embedded JSON: taken_at_timestamp (epoch secs) -> UTC ISO
+    m = re.search(r'"taken_at_timestamp"\s*:\s*(\d{10})', page_html)
+    if m:
+        return datetime.fromtimestamp(
+            int(m.group(1)), tz=timezone.utc
+        ).strftime("%Y-%m-%dT%H:%M:%SZ")
     return ""
 
 

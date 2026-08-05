@@ -32,6 +32,7 @@ from playwright.sync_api import (
 
 from parsers import (
     REEL_URL_RE,
+    looks_like_handle,
     normalize_reel_url,
     parse_caption_from_html,
     parse_counts_from_html,
@@ -358,6 +359,7 @@ class InstagramReelScraper:
         self,
         urls: List[str],
         progress_cb: Optional[Callable[[int, int], None]] = None,
+        row_cb: Optional[Callable[[ReelData], None]] = None,
     ) -> List[ReelData]:
         """
         Scrape every URL. `workers` parallel browser windows are used, one
@@ -429,6 +431,8 @@ class InstagramReelScraper:
                             results.append(data)
                         if progress_cb:
                             progress_cb(len(results), total)
+                        if row_cb:
+                            row_cb(data)
                         fail_streak = fail_streak + 1 if data.status != "ok" else 0
                         wait = (
                             self.delay
@@ -519,6 +523,17 @@ class InstagramReelScraper:
                 except Exception:
                     pass
 
+            # Adaptive: if the username is still empty after reload, the page
+            # structure likely changed -> mark retryable so _scrape_one tries
+            # once more with a fresh navigation.
+            if not data.username:
+                data.status = "error: structure_change"
+                self.log(
+                    f"    [!] {url} - structure may have changed; "
+                    "username empty after reload. Retrying once."
+                )
+                return data
+
             data.status = "ok"
         except PWTimeoutError:
             data.status = "timeout"
@@ -568,6 +583,29 @@ class InstagramReelScraper:
                 ) or ""
             except Exception:
                 pass
+
+        # display-name guard: prefer a real @handle over a styled display name
+        if d.username and not looks_like_handle(d.username):
+            try:
+                handle = page.evaluate(
+                    """
+                    () => {
+                        const anchors = document.querySelectorAll(
+                            'article header a[href^="/"], article a[href^="/"]'
+                        );
+                        const re = /^\/([\w.]+)\/?$/;
+                        for (const a of anchors) {
+                            const m = (a.getAttribute('href') || '').match(re);
+                            if (m) return m[1];
+                        }
+                        return '';
+                    }
+                    """
+                ) or ""
+            except Exception:
+                handle = ""
+            if handle:
+                d.username = handle
 
         # --- music info ---
         music = parse_music_from_html(html)

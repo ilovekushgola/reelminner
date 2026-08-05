@@ -64,6 +64,7 @@ class ReelScraperApp(tk.Tk):
         self._scraper = InstagramReelScraper(log=self._log_from_thread)
         self._running = False
         self._results = []
+        self._row_seq = 0
 
         self._build_style()
         self._build_ui()
@@ -373,6 +374,7 @@ class ReelScraperApp(tk.Tk):
         total = len(urls)
 
         self._results = []
+        self._row_seq = 0
         self._clear_tree()
         self.saved_lbl.config(text="")
         self.progress_bar.config(maximum=total, value=0)
@@ -386,7 +388,9 @@ class ReelScraperApp(tk.Tk):
     def _run_scrape(self, urls) -> None:
         try:
             results = self._scraper.scrape(
-                urls, progress_cb=lambda done, t: self._q.put(("progress", done, t))
+                urls,
+                progress_cb=lambda done, t: self._q.put(("progress", done, t)),
+                row_cb=lambda d: self._q.put(("row", d)),
             )
             self._q.put(("done", results))
         except Exception as e:
@@ -445,21 +449,27 @@ class ReelScraperApp(tk.Tk):
 
     def _fill_tree(self, results) -> None:
         self._clear_tree()
-        for i, d in enumerate(results, 1):
-            if d.status == "ok":
-                tag = "ok"
-            elif d.status.startswith("error"):
-                tag = "err"
-            else:
-                tag = "warn"
-            self.tree.insert(
-                "", tk.END, iid=str(i),
-                values=(
-                    i, d.username, d.reel_url, d.music_title,
-                    d.music_artist, d.likes, d.status,
-                ),
-                tags=(tag,),
-            )
+        self._row_seq = 0
+        for d in results:
+            self._add_row(d)
+
+    def _add_row(self, d) -> None:
+        """Insert one row into the table (used live while scraping and on redraw)."""
+        self._row_seq += 1
+        if d.status == "ok":
+            tag = "ok"
+        elif d.status.startswith("error"):
+            tag = "err"
+        else:
+            tag = "warn"
+        self.tree.insert(
+            "", tk.END, iid=str(self._row_seq),
+            values=(
+                self._row_seq, d.username, d.reel_url, d.music_title,
+                d.music_artist, d.likes, d.status,
+            ),
+            tags=(tag,),
+        )
 
     def _on_done(self, results) -> None:
         self._results = results
@@ -639,6 +649,8 @@ class ReelScraperApp(tk.Tk):
                         f"Logged in as @{user}\nSession saved locally to\n"
                         f"{DEFAULT_STATE_FILE.name}",
                     )
+                elif kind == "row":
+                    self._add_row(item[1])
                 elif kind == "done":
                     self._on_done(item[1])
         except queue.Empty:

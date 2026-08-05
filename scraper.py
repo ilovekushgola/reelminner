@@ -16,7 +16,6 @@ import csv
 import json
 import queue
 import random
-import re
 import threading
 import time
 from dataclasses import asdict, dataclass
@@ -30,7 +29,16 @@ from playwright.sync_api import (
     sync_playwright,
 )
 
-from parsers import REEL_URL_RE, normalize_reel_url  # noqa: F401  (re-exported for gui.py)
+from parsers import (
+    REEL_URL_RE,
+    normalize_reel_url,
+    parse_caption_from_html,
+    parse_counts_from_html,
+    parse_music_from_html,
+    parse_uploaded_at_from_html,
+    parse_username_from_html,
+    parse_video_url_from_html,
+)
 
 # ----------------------------------------------------------------------------
 # Constants
@@ -73,6 +81,7 @@ class ReelData:
     uploaded_at: str = ""
     video_url: str = ""
     status: str = "ok"
+    is_original_audio: bool = False
 
     def to_dict(self) -> dict:
         return asdict(self)
@@ -92,6 +101,7 @@ class ReelData:
             "uploaded_at",
             "video_url",
             "status",
+            "is_original_audio",
         ]
 
 
@@ -138,6 +148,7 @@ def export_excel(results: List[ReelData], path: str | Path) -> None:
         "username": 22, "reel_url": 55, "music_title": 38, "music_artist": 24,
         "audio_page_url": 55, "caption": 60, "likes": 10, "comments": 12,
         "plays": 10, "uploaded_at": 22, "video_url": 60, "status": 14,
+        "is_original_audio": 12,
     }
     for i, c in enumerate(cols, 1):
         ws.column_dimensions[get_column_letter(i)].width = widths.get(c, 20)
@@ -487,13 +498,12 @@ class InstagramReelScraper:
 
     def _extract(self, page: Page) -> ReelData:
         d = ReelData()
-        html = ""
         try:
             html = page.content()
         except Exception:
-            pass
+            html = ""
 
-        # --- canonical reel URL ---
+        # canonical reel URL
         try:
             d.reel_url = page.eval_on_selector(
                 'link[rel="canonical"]', "el => el.href"
@@ -501,26 +511,8 @@ class InstagramReelScraper:
         except Exception:
             pass
 
-        # --- username (several fallbacks) ---
-        try:
-            og_title = page.eval_on_selector(
-                'meta[property="og:title"]', "el => el.content"
-            )
-            m = re.search(r"^\s*([^|]+?)\s+on Instagram", og_title or "")
-            if m:
-                d.username = m.group(1).strip()
-        except Exception:
-            pass
-        if not d.username:
-            try:
-                meta_desc = page.eval_on_selector(
-                    'meta[name="description"]', "el => el.content"
-                )
-                m = re.search(r"^\s*([\w.]+)\s*\(@", meta_desc or "")
-                if m:
-                    d.username = m.group(1).strip()
-            except Exception:
-                pass
+        # --- username: parsers first, article-header anchor as fallback ---
+        d.username = parse_username_from_html(html)
         if not d.username:
             try:
                 d.username = page.evaluate(
@@ -529,7 +521,7 @@ class InstagramReelScraper:
                         const anchors = document.querySelectorAll(
                             'article header a[href^="/"], article a[href^="/"]'
                         );
-                        const re = /^\\/([\\w.]+)\\/?$/;
+                        const re = /^\/([\w.]+)\/?$/;
                         for (const a of anchors) {
                             const m = (a.getAttribute('href') || '').match(re);
                             if (m) return m[1];
@@ -541,122 +533,42 @@ class InstagramReelScraper:
             except Exception:
                 pass
 
-        # --- music info (prefer the embedded JSON, fall back to DOM) ---
-        try:
-            m = re.search(
-                r'"music_asset_info":\s*(\{.*?\})\s*(?:[,}])', html, re.DOTALL
-            )
-            if m:
-                obj = json.loads(m.group(1))
-                d.music_title = (obj.get("title") or "").strip()
-                d.music_artist = (obj.get("display_artist") or "").strip()
-        except Exception:
-            pass
-        try:
-            audio_links = page.evaluate(
-                r"""
-                () => {
-                    const links = [...document.querySelectorAll(
-                        'a[href*="/reels/audio/"]'
-                    )];
-                    const out = [];
-                    for (const a of links) {
-                        const spans = [...a.querySelectorAll('span')]
-                            .map(s => (s.textContent || '')
-                                .replace(/\s+/g, ' ').trim())
-                            .filter(Boolean);
-                        let best = '';
-                        for (const s of spans) if (s.length > best.length) best = s;
-                        let text = best || (a.textContent || '')
-                            .replace(/\s+/g, ' ').trim();
-                        text = text.replace(/^Use this sound\s*/i, '')
-                                  .replace(/^Original audio\s*/i, '')
-                                  .trim();
-                        out.push({ text, href: a.getAttribute('href') || '' });
+        # --- music info ---
+        music = parse_music_from_html(html)
+        d.music_title = music["title"]
+        d.music_artist = music["artist"]
+        d.audio_page_url = music["audio_page_url"]
+        d.is_original_audio = music["original"]
+
+        # --- likes / comments / plays: parsers first, DOM spans as fallback ---
+        counts = parse_counts_from_html(html)
+        d.likes, d.comments, d.plays = counts["likes"], counts["comments"], counts["plays"]
+        if not d.likes or not d.comments:
+            try:
+                dom_counts = page.evaluate(
+                    r"""
+                    () => {
+                        const pick = (sel) => {
+                            const el = document.querySelector(sel);
+                            return el ? (el.textContent || '')
+                                .replace(/\s+/g, ' ').trim() : '';
+                        };
+                        return {
+                            likes: pick('a[href*="/liked_by/"] span'),
+                            comments: pick('a[href*="/comments/"] span'),
+                        };
                     }
-                    return out;
-                }
-                """
-            )
-            for item in reversed(audio_links or []):
-                text = (item.get("text") or "").strip()
-                if text and text.lower() not in ("use this sound", "original audio"):
-                    if not d.music_title:
-                        d.music_title = text
-                    href = item.get("href") or ""
-                    d.audio_page_url = (
-                        href
-                        if href.startswith("http")
-                        else "https://www.instagram.com" + href
-                    )
-                    break
-        except Exception:
-            pass
+                    """
+                ) or {}
+                d.likes = d.likes or (dom_counts.get("likes") or "")
+                d.comments = d.comments or (dom_counts.get("comments") or "")
+            except Exception:
+                pass
 
-        # --- likes / comments / plays (DOM first, embedded JSON fallback) ---
-        try:
-            counts = page.evaluate(
-                r"""
-                () => {
-                    const pick = (sel) => {
-                        const el = document.querySelector(sel);
-                        return el ? (el.textContent || '')
-                            .replace(/\s+/g, ' ').trim() : '';
-                    };
-                    return {
-                        likes: pick('a[href*="/liked_by/"] span'),
-                        comments: pick('a[href*="/comments/"] span'),
-                    };
-                }
-                """
-            )
-            d.likes = (counts or {}).get("likes") or ""
-            d.comments = (counts or {}).get("comments") or ""
-        except Exception:
-            pass
-
-        def _num(pat: str) -> str:
-            m = re.search(pat, html)
-            return m.group(1) if m else ""
-
-        if not d.likes:
-            d.likes = _num(r'"like_count"\s*:\s*(\d+)')
-        if not d.comments:
-            d.comments = _num(r'"comment_count"\s*:\s*(\d+)')
-        d.plays = _num(r'"play_count"\s*:\s*(\d+)') or _num(
-            r'"video_play_count"\s*:\s*(\d+)'
-        )
-
-        # --- caption ---
-        try:
-            desc = page.eval_on_selector(
-                'meta[property="og:description"]', "el => el.content"
-            ) or ""
-            desc = re.sub(r"^.*?on Instagram:\s*", "", desc, count=1)
-            d.caption = desc.strip()[:500]
-        except Exception:
-            pass
-
-        # --- upload date ---
-        try:
-            d.uploaded_at = page.eval_on_selector(
-                'meta[property="article:published_time"]', "el => el.content"
-            ) or _num(r'"uploadDate"\s*:\s*"([^"]+)"')
-        except Exception:
-            pass
-
-        # --- direct video URL (if present) ---
-        try:
-            d.video_url = page.eval_on_selector(
-                'meta[property="og:video"]', "el => el.content"
-            ) or page.eval_on_selector(
-                'meta[property="og:video:url"]', "el => el.content"
-            )
-        except Exception:
-            m = re.search(r'"contentUrl"\s*:\s*"([^"]+)"', html)
-            if m:
-                d.video_url = m.group(1)
-
+        # --- caption / upload date / video URL ---
+        d.caption = parse_caption_from_html(html)
+        d.uploaded_at = parse_uploaded_at_from_html(html)
+        d.video_url = parse_video_url_from_html(html)
         return d
 
     # ------------------------------------------------------------------ #

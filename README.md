@@ -128,3 +128,19 @@ instagram-reel-scraper/
 ├── storage_state.json  # created at first login (git-ignored)
 └── results/            # auto-saved CSVs (git-ignored)
 ```
+
+## QA loop
+
+```powershell
+python -m pytest tests/ -v        # unit layer (no network)
+python run_qa.py --workers 2 --delay 2.0   # full corpus run, visible browsers
+python run_qa.py --quick          # fast 1-URL iteration (headless)
+python run_qa.py --report-only    # show last report
+```
+
+Full runs write `results/qa/qa_report.json` + `qa_results.csv` and exit 0
+only when every gate passes (ok_rate >= 0.75, username fill >= 0.80,
+music fill >= 0.60 on licensed reels, no session_expired, runtime <= 1800s).
+Decision rules: `session_expired` -> re-import cookies; `timeout`/`error` ->
+backoff + retry (already built in); `unavailable` -> deleted/private reel,
+expected; low music fill -> add a fixture + extend `parsers.parse_music_from_html`.

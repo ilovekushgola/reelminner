@@ -57,9 +57,9 @@ def parse_username_from_html(page_html: str) -> str:
     m = re.search(r"\(@([\w.]+)\)", og_title)
     if m:
         return m.group(1).strip()
-    # 2. plain handle in og:title
+    # 2. plain handle in og:title (skip styled display names -> fall through)
     m = re.match(r"^\s*([^|]+?)\s+on Instagram", og_title)
-    if m:
+    if m and looks_like_handle(m.group(1).strip()):
         return m.group(1).strip()
     # caption-style fallbacks, checked against both meta kinds that carry it
     for desc in (

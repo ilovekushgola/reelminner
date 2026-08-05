@@ -11,6 +11,11 @@ LIKES_PREFIX_CAPTION = (
     '<meta property="og:description" content="35 likes, 0 comments - '
     'pulsar_220_official on August 4, 2026: caption text here" />'
 )
+DISPLAY_TITLE = (
+    '<meta property="og:title" content="PULSAR 220 OFFICIAL™️ on Instagram" />'
+    '<meta property="og:description" content="35 likes, 0 comments - '
+    'pulsar_220_official on August 4, 2026: caption text here" />'
+)
 OWNER_JSON = (
     '<script type="application/ld+json">{"owner": {"username": "bmw_x7_club"}, '
     '"taken_at_timestamp": 1775200000}</script>'
@@ -23,6 +28,10 @@ def test_at_handle_in_og_title_wins():
 
 def test_handle_from_likes_prefix_caption():
     assert parse_username_from_html(LIKES_PREFIX_CAPTION) == "pulsar_220_official"
+
+
+def test_display_name_title_falls_through_to_caption_handle():
+    assert parse_username_from_html(DISPLAY_TITLE) == "pulsar_220_official"
 
 
 def test_handle_from_owner_json():

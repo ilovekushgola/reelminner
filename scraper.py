@@ -68,6 +68,11 @@ def backoff_delay(consecutive_failures: int, base: float = 2.0, cap: float = 30.
     return min(cap, base * (2 ** (consecutive_failures - 1)))
 
 
+def should_retry(status: str) -> bool:
+    """Transient failures worth one automatic retry."""
+    return status == "timeout" or status.startswith("error:")
+
+
 # ----------------------------------------------------------------------------
 # Data model
 # ----------------------------------------------------------------------------
@@ -461,6 +466,19 @@ class InstagramReelScraper:
 
     def _scrape_one(self, page: Page, url: str) -> ReelData:
         data = ReelData(reel_url=url)
+        for attempt in (1, 2):
+            data = self._attempt_one(page, url)
+            if data.status == "ok" or not should_retry(data.status):
+                break
+            if self._stop.is_set():
+                break
+            self.log(f"    retry {url} (attempt {attempt + 1})")
+            page.wait_for_timeout(1500)
+        return data
+
+    def _attempt_one(self, page: Page, url: str) -> ReelData:
+        """Single navigation + extraction pass for one reel URL."""
+        data = ReelData(reel_url=url)
         try:
             page.goto(url, wait_until="domcontentloaded", timeout=60000)
             self._dismiss_overlays(page)
@@ -494,9 +512,7 @@ class InstagramReelScraper:
             # One reload retry if the page rendered without core data.
             if not data.username and not data.music_title:
                 try:
-                    page.reload(
-                        wait_until="domcontentloaded", timeout=45000
-                    )
+                    page.reload(wait_until="domcontentloaded", timeout=45000)
                     page.wait_for_timeout(2500)
                     data = self._extract(page)
                 except Exception:

@@ -9,6 +9,7 @@ from __future__ import annotations
 import html as htmlmod
 import json
 import re
+from datetime import datetime
 
 REEL_URL_RE = re.compile(
     r"https?://(?:www\.)?instagram\.com/(reel|reels|p)/([\w-]+)", re.IGNORECASE
@@ -50,10 +51,21 @@ def parse_username_from_html(page_html: str) -> str:
     m = re.match(r"^\s*([^|]+?)\s+on Instagram", og_title)
     if m:
         return m.group(1).strip()
-    desc = meta_content(page_html, "name", "description")
-    m = re.match(r"^\s*([\w.]+)\s*\(@", desc)
-    if m:
-        return m.group(1).strip()
+    # caption-style fallbacks: '<username> on <Month D, YYYY>' (profile-less
+    # reels) — checked against both meta kinds that carry the caption.
+    for desc in (
+        meta_content(page_html, "name", "description"),
+        meta_content(page_html, "property", "og:description"),
+    ):
+        m = re.match(r"^\s*([\w.]+)\s*\(@", desc)
+        if m:
+            return m.group(1).strip()
+        m = re.match(r"^\s*([\w.]+)\s+on\s+[A-Z][a-z]+\s+\d{1,2},\s+\d{4}", desc)
+        if m:
+            return m.group(1).strip()
+        m = re.match(r"^\s*([\w.]+)\s+on Instagram", desc)
+        if m:
+            return m.group(1).strip()
     return ""
 
 
@@ -68,7 +80,16 @@ def parse_uploaded_at_from_html(page_html: str) -> str:
     if v:
         return v
     m = re.search(r'"uploadDate"\s*:\s*"([^"]+)"', page_html)
-    return m.group(1) if m else ""
+    if m:
+        return m.group(1)
+    # caption-style fallback: '... on <Month D, YYYY>' -> YYYY-MM-DD
+    m = re.search(r"on\s+([A-Z][a-z]+\s+\d{1,2},\s+\d{4})", page_html)
+    if m:
+        try:
+            return datetime.strptime(m.group(1), "%B %d, %Y").strftime("%Y-%m-%d")
+        except ValueError:
+            return ""
+    return ""
 
 
 def parse_video_url_from_html(page_html: str) -> str:

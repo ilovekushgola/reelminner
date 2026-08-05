@@ -30,6 +30,8 @@ from playwright.sync_api import (
     sync_playwright,
 )
 
+from parsers import REEL_URL_RE, normalize_reel_url  # noqa: F401  (re-exported for gui.py)
+
 # ----------------------------------------------------------------------------
 # Constants
 # ----------------------------------------------------------------------------
@@ -41,10 +43,6 @@ DEFAULT_STATE_FILE = APP_DIR / "storage_state.json"
 USER_AGENT = (
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
     "(KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36"
-)
-
-REEL_URL_RE = re.compile(
-    r"https?://(?:www\.)?instagram\.com/(reel|reels|p)/([\w-]+)", re.IGNORECASE
 )
 
 BROWSER_ARGS = [
@@ -804,16 +802,11 @@ def main() -> None:
             if line.strip()
         ]
 
-    # normalize / validate (same behaviour as the GUI)
     normalized = []
     for u in urls:
-        u = u.strip()
-        if not u:
-            continue
-        if not u.startswith(("http://", "https://")):
-            u = "https://" + u
-        if REEL_URL_RE.search(u):
-            normalized.append(u)
+        norm = normalize_reel_url(u)
+        if norm:
+            normalized.append(norm)
         else:
             print(f"[!] Skipped (not a reel URL): {u}")
     urls = normalized

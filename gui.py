@@ -31,10 +31,10 @@ except Exception:
 
 from scraper import (
     DEFAULT_STATE_FILE,
-    REEL_URL_RE,
     InstagramReelScraper,
     export_excel,
     export_json,
+    normalize_reel_url,
     write_csv,
 )
 
@@ -409,16 +409,8 @@ class ReelScraperApp(tk.Tk):
         raw = self.urls_text.get("1.0", tk.END)
         seen, out = set(), []
         for line in raw.splitlines():
-            u = line.strip()
-            if not u:
-                continue
-            if not u.startswith(("http://", "https://")):
-                u = "https://" + u
-            m = REEL_URL_RE.search(u)
-            if m:
-                norm = (
-                    f"https://www.instagram.com/{m.group(1).lower()}/{m.group(2)}/"
-                )
+            norm = normalize_reel_url(line)
+            if norm:
                 if norm not in seen:
                     seen.add(norm)
                     out.append(norm)

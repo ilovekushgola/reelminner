@@ -4,6 +4,12 @@ results/
 *.csv
 *.xlsx
 *.json
+selftest_report.txt
+
+# build artifacts
+dist/
+build/
+installer/Output/
 
 # python
 __pycache__/

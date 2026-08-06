@@ -687,5 +687,28 @@ class ReelScraperApp(tk.Tk):
 
 
 if __name__ == "__main__":
+    import argparse
+    import sys
+
+    parser = argparse.ArgumentParser(prog="InstagramReelScraper")
+    parser.add_argument(
+        "--selftest",
+        action="store_true",
+        help="write a health report to dist/selftest_report.txt (or cwd) and exit without opening the window",
+    )
+    args = parser.parse_args()
+    if args.selftest:
+        lines = [
+            "SELFTEST OK",
+            f"frozen={'yes' if getattr(sys, 'frozen', False) else 'no'}",
+            "app=InstagramReelScraper",
+        ]
+        report = Path("selftest_report.txt")
+        try:
+            report.write_text("\n".join(lines), encoding="utf-8")
+        except OSError:
+            report = Path(__file__).resolve().parent / "selftest_report.txt"
+            report.write_text("\n".join(lines), encoding="utf-8")
+        sys.exit(0)
     app = ReelScraperApp()
     app.mainloop()

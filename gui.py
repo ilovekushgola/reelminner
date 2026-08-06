@@ -92,9 +92,35 @@ class ReelScraperApp(tk.Tk):
 
         self._build_style()
         self._build_ui()
+        self._bind_shortcuts()
         self._refresh_session()
         self.protocol("WM_DELETE_WINDOW", self._on_close)
         self.after(120, self._poll)
+
+    # ------------------------------------------------------------------ #
+    # Keyboard shortcuts / accessibility
+    # ------------------------------------------------------------------ #
+
+    def _bind_shortcuts(self) -> None:
+        self.bind_all("<Control-Return>", lambda e: self._on_start())
+        self.bind_all("<Escape>", lambda e: self._on_stop())
+        # Ctrl+A selects all URLs in the input box (Text has no default).
+        self.urls_text.bind(
+            "<Control-a>",
+            lambda e: (
+                e.widget.tag_add(tk.SEL, "1.0", tk.END),
+                e.widget.mark_set(tk.INSERT, "1.0"),
+                e.widget.see(tk.INSERT),
+                "break",
+            ),
+        )
+        # Visible focus ring on the two main action buttons.
+        for btn in (self.start_btn, self.stop_btn):
+            btn.config(
+                highlightthickness=1,
+                highlightbackground=BORDER,
+                highlightcolor=ACCENT,
+            )
 
     # ------------------------------------------------------------------ #
     # UI construction

@@ -47,6 +47,10 @@ OK_GREEN = "#0A7D32"
 ERR_RED = "#C62828"
 WARN_ORANGE = "#E65100"
 
+# Results table column order. "followers" sits at index 2, so "reel_url"
+# is index 3 — always resolve by name, never by hardcoded index.
+COLUMN_ORDER = ("idx", "username", "followers", "reel_url", "music", "artist", "likes", "status")
+
 
 def stamp() -> str:
     return datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -223,7 +227,7 @@ class ReelScraperApp(tk.Tk):
         results_frame.columnconfigure(0, weight=1)
         results_frame.rowconfigure(0, weight=1)
 
-        cols = ("idx", "username", "followers", "reel_url", "music", "artist", "likes", "status")
+        cols = COLUMN_ORDER
         self.tree = ttk.Treeview(
             results_frame, columns=cols, show="headings", selectmode="browse"
         )
@@ -549,13 +553,14 @@ class ReelScraperApp(tk.Tk):
 
     def _copy_url(self, iid) -> None:
         values = self._row_values(iid)
+        url = values[COLUMN_ORDER.index("reel_url")]
         self.clipboard_clear()
-        self.clipboard_append(values[2])
-        self._append_log(f"* Copied URL: {values[2]}")
+        self.clipboard_append(url)
+        self._append_log(f"* Copied URL: {url}")
 
     def _open_url(self, iid) -> None:
         values = self._row_values(iid)
-        webbrowser.open(values[2])
+        webbrowser.open(values[COLUMN_ORDER.index("reel_url")])
 
     def _copy_row(self, iid) -> None:
         values = self._row_values(iid)

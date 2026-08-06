@@ -55,6 +55,7 @@ from theme import (
     UI,
     UI_BOLD,
     WARN,
+    ZEBRA_EVEN,
 )
 
 APP_DIR = Path(__file__).resolve().parent
@@ -312,6 +313,8 @@ class ReelScraperApp(tk.Tk):
         self.tree.tag_configure("ok", foreground=OK_GREEN)
         self.tree.tag_configure("err", foreground=ERR_RED)
         self.tree.tag_configure("warn", foreground=WARN_ORANGE)
+        self.tree.tag_configure("odd", background=BG_PANEL)
+        self.tree.tag_configure("even", background=ZEBRA_EVEN)
 
         vsb = ttk.Scrollbar(results_frame, orient="vertical", command=self.tree.yview)
         hsb = ttk.Scrollbar(results_frame, orient="horizontal", command=self.tree.xview)
@@ -322,7 +325,7 @@ class ReelScraperApp(tk.Tk):
         self.tree.bind("<Double-1>", self._on_tree_double)
         self.tree.bind("<Button-3>", self._on_tree_right_click)
 
-        export_bar = tk.Frame(results_frame)
+        export_bar = tk.Frame(results_frame, bg=BG_PANEL)
         export_bar.grid(row=2, column=0, columnspan=2, sticky="ew", pady=(6, 0))
         self.csv_btn = ttk.Button(
             export_bar, text="Save CSV", command=self._on_export_csv,
@@ -357,6 +360,10 @@ class ReelScraperApp(tk.Tk):
             bg=BG_INPUT, fg=FG, insertbackground=FG,
         )
         self.log_text.grid(row=0, column=0, sticky="ew")
+        self.log_text.tag_configure("info", foreground=FG_MUTED)
+        self.log_text.tag_configure("ok", foreground=SUCCESS)
+        self.log_text.tag_configure("warn", foreground=WARN)
+        self.log_text.tag_configure("err", foreground=ERROR)
 
         # ---- status bar ----
         status = tk.Frame(self, bg=BG_PANEL, height=26)
@@ -562,13 +569,14 @@ class ReelScraperApp(tk.Tk):
             tag = "err"
         else:
             tag = "warn"
+        parity = "even" if self._row_seq % 2 == 0 else "odd"
         self.tree.insert(
             "", tk.END, iid=iid,
             values=(
                 str(self._row_seq), d.username, d.followers, d.reel_url,
                 d.music_title, d.music_artist, d.likes, d.status,
             ),
-            tags=(tag,),
+            tags=(tag, parity),
         )
 
     def _on_done(self, results) -> None:
@@ -730,8 +738,17 @@ class ReelScraperApp(tk.Tk):
         self._q.put(("log", msg))
 
     def _append_log(self, msg: str) -> None:
+        # Colorize by prefix: [OK] success, [!] warn, [x] error, else muted.
+        if msg.startswith("[x]") or msg.startswith("[ERROR]"):
+            tag = "err"
+        elif msg.startswith("[!]"):
+            tag = "warn"
+        elif msg.startswith("[OK]"):
+            tag = "ok"
+        else:
+            tag = "info"
         self.log_text.configure(state="normal")
-        self.log_text.insert(tk.END, msg + "\n")
+        self.log_text.insert(tk.END, msg + "\n", tag)
         self.log_text.see(tk.END)
         self.log_text.configure(state="disabled")
 

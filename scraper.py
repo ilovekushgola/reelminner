@@ -36,6 +36,7 @@ from parsers import (
     normalize_reel_url,
     parse_caption_from_html,
     parse_counts_from_html,
+    parse_followers_from_html,
     parse_music_from_html,
     parse_uploaded_at_from_html,
     parse_username_from_html,
@@ -85,6 +86,7 @@ class ReelData:
     """One scraped reel record."""
 
     username: str = ""
+    followers: str = ""
     reel_url: str = ""
     music_title: str = ""
     music_artist: str = ""
@@ -105,6 +107,7 @@ class ReelData:
     def csv_columns() -> List[str]:
         return [
             "username",
+            "followers",
             "reel_url",
             "music_title",
             "music_artist",
@@ -160,7 +163,7 @@ def export_excel(results: List[ReelData], path: str | Path) -> None:
         ws.append([d.get(c, "") for c in cols])
 
     widths = {
-        "username": 22, "reel_url": 55, "music_title": 38, "music_artist": 24,
+        "username": 22, "followers": 12, "reel_url": 55, "music_title": 38, "music_artist": 24,
         "audio_page_url": 55, "caption": 60, "likes": 10, "comments": 12,
         "plays": 10, "uploaded_at": 22, "video_url": 60, "status": 14,
         "is_original_audio": 12,
@@ -360,6 +363,7 @@ class InstagramReelScraper:
         urls: List[str],
         progress_cb: Optional[Callable[[int, int], None]] = None,
         row_cb: Optional[Callable[[ReelData], None]] = None,
+        with_profiles: bool = False,
     ) -> List[ReelData]:
         """
         Scrape every URL. `workers` parallel browser windows are used, one
@@ -459,6 +463,37 @@ class InstagramReelScraper:
         for t in threads:
             t.join()
 
+        # Phase 2 (optional): auto-scrape each owner profile for followers.
+        if with_profiles:
+            self.log("[>] Auto-scraping profiles for followers count...")
+            try:
+                with sync_playwright() as p:
+                    browser = p.chromium.launch(headless=self.headless, args=BROWSER_ARGS)
+                    context = browser.new_context(
+                        storage_state=(
+                            str(self.state_file) if self.state_file.exists() else None
+                        ),
+                        user_agent=USER_AGENT,
+                        viewport={"width": 1280, "height": 900},
+                        locale="en-US",
+                    )
+                    for d in results:
+                        if self._stop.is_set():
+                            break
+                        if d.status == "ok" and d.username and not d.followers:
+                            self.log(f"    profile -> @{d.username}")
+                            page = context.new_page()
+                            try:
+                                d.followers = self._scrape_profile(page, d.username)
+                            finally:
+                                page.close()
+                            if row_cb:
+                                row_cb(d)  # live-update the followers cell
+                    context.close()
+                    browser.close()
+            except Exception as e:  # pragma: no cover - defensive
+                self.log(f"    [x] profile phase crashed: {e}")
+
         self.log(f"[OK] Done. {len(results)}/{total} scraped.")
         return results
 
@@ -468,6 +503,51 @@ class InstagramReelScraper:
     # ------------------------------------------------------------------ #
     # Single page scrape
     # ------------------------------------------------------------------ #
+
+    def _scrape_profile(self, page: Page, username: str) -> str:
+        """Fetch @username's profile and return the followers count string."""
+        url = f"https://www.instagram.com/{username}/"
+        try:
+            page.goto(url, wait_until="domcontentloaded", timeout=60000)
+            self._dismiss_overlays(page)
+            if self._is_login_wall(page):
+                return ""
+            try:
+                page.wait_for_selector(
+                    'meta[property="og:description"], a[href$="/followers/"]',
+                    timeout=30000,
+                )
+            except PWTimeoutError:
+                pass
+            page.wait_for_timeout(2500)
+            try:
+                html = page.content()
+            except Exception:
+                html = ""
+            followers = parse_followers_from_html(html)
+            if followers:
+                return followers
+            # DOM fallback: title attribute (e.g. "35K") on the followers link
+            try:
+                dom = page.evaluate(
+                    r"""
+                    () => {
+                        const el = document.querySelector(
+                            'a[href$="/followers/"] span'
+                        );
+                        if (!el) return '';
+                        return (el.getAttribute('title') || el.textContent || '')
+                            .replace(/\s+/g, ' ').trim();
+                    }
+                    """
+                ) or ""
+            except Exception:
+                dom = ""
+            return dom.strip()
+        except PWTimeoutError:
+            return ""
+        except Exception:
+            return ""
 
     def _scrape_one(self, page: Page, url: str) -> ReelData:
         data = ReelData(reel_url=url)
@@ -703,11 +783,12 @@ class InstagramReelScraper:
 def _print_table(results: List[ReelData]) -> None:
     if not results:
         return
-    print(f"\n{'USERNAME':<20} {'MUSIC':<40} {'STATUS':<18} REEL URL")
-    print("-" * 110)
+    print(f"\n{'USERNAME':<20} {'FOLLOWERS':<12} {'MUSIC':<40} {'STATUS':<18} REEL URL")
+    print("-" * 120)
     for r in results:
         print(
-            f"{r.username[:19]:<20} {(r.music_title or '')[:39]:<40} "
+            f"{r.username[:19]:<20} {(r.followers or '')[:11]:<12} "
+            f"{(r.music_title or '')[:39]:<40} "
             f"{r.status:<18} {r.reel_url}"
         )
 
@@ -762,6 +843,10 @@ def main() -> None:
         "-o", "--output", default="reels_results.csv",
         help="output CSV path (default: reels_results.csv)",
     )
+    parser.add_argument(
+        "--no-profiles", action="store_true",
+        help="skip auto-scraping owner profiles for followers count",
+    )
     args = parser.parse_args()
 
     scraper = InstagramReelScraper(
@@ -808,7 +893,7 @@ def main() -> None:
         parser.print_help()
         return
 
-    results = scraper.scrape(urls)
+    results = scraper.scrape(urls, with_profiles=not args.no_profiles)
     if results:
         write_csv(results, args.output)
         print(f"[OK] Results written to {args.output}")

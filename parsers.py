@@ -203,6 +203,23 @@ def parse_music_from_html(page_html: str) -> dict:
     return result
 
 
+def parse_followers_from_html(page_html: str) -> str:
+    """Followers count from a profile page: og:description, JSON, else ''."""
+    # og:description: "12.3K Followers, 10 Following, 200 Posts"
+    desc = meta_content(page_html, "property", "og:description")
+    m = re.search(r"([\d,.]+\s*[KMB]?)\s+Followers", desc)
+    if m:
+        return m.group(1).strip().replace(" ", "")
+    # JSON-LD / embedded JSON
+    m = re.search(r'"edge_followed_by"\s*:\s*\{\s*"count"\s*:\s*(\d+)', page_html)
+    if m:
+        return m.group(1)
+    m = re.search(r'"followers"\s*:\s*(\d+)', page_html)
+    if m:
+        return m.group(1)
+    return ""
+
+
 def parse_counts_from_html(page_html: str) -> dict:
     def num(pat: str) -> str:
         m = re.search(pat, page_html)

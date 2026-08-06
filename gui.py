@@ -187,7 +187,13 @@ class ReelScraperApp(tk.Tk):
         self.auto_save_var = tk.BooleanVar(value=True)
         ttk.Checkbutton(
             opts, text="Auto-save CSV when done", variable=self.auto_save_var
-        ).pack(side=tk.LEFT)
+        ).pack(side=tk.LEFT, padx=(16, 0))
+
+        self.auto_profiles_var = tk.BooleanVar(value=True)
+        ttk.Checkbutton(
+            opts, text="Auto-scrape profiles (followers)",
+            variable=self.auto_profiles_var,
+        ).pack(side=tk.LEFT, padx=(16, 0))
 
         # ---- actions ----
         actions = ttk.Frame(self, padding=(10, 8))
@@ -217,18 +223,18 @@ class ReelScraperApp(tk.Tk):
         results_frame.columnconfigure(0, weight=1)
         results_frame.rowconfigure(0, weight=1)
 
-        cols = ("idx", "username", "reel_url", "music", "artist", "likes", "status")
+        cols = ("idx", "username", "followers", "reel_url", "music", "artist", "likes", "status")
         self.tree = ttk.Treeview(
             results_frame, columns=cols, show="headings", selectmode="browse"
         )
         headings = {
-            "idx": "#", "username": "Username", "reel_url": "Reel URL",
-            "music": "Music", "artist": "Artist", "likes": "Likes",
-            "status": "Status",
+            "idx": "#", "username": "Username", "followers": "Followers",
+            "reel_url": "Reel URL", "music": "Music", "artist": "Artist",
+            "likes": "Likes", "status": "Status",
         }
         widths = {
-            "idx": 40, "username": 150, "reel_url": 300, "music": 220,
-            "artist": 140, "likes": 80, "status": 130,
+            "idx": 40, "username": 150, "followers": 90, "reel_url": 300,
+            "music": 220, "artist": 140, "likes": 80, "status": 130,
         }
         for c in cols:
             self.tree.heading(c, text=headings[c])
@@ -391,6 +397,7 @@ class ReelScraperApp(tk.Tk):
                 urls,
                 progress_cb=lambda done, t: self._q.put(("progress", done, t)),
                 row_cb=lambda d: self._q.put(("row", d)),
+                with_profiles=bool(self.auto_profiles_var.get()),
             )
             self._q.put(("done", results))
         except Exception as e:
@@ -454,7 +461,23 @@ class ReelScraperApp(tk.Tk):
             self._add_row(d)
 
     def _add_row(self, d) -> None:
-        """Insert one row into the table (used live while scraping and on redraw)."""
+        """Insert or update one table row.
+
+        reel_url is the stable iid, so the profile phase can live-update the
+        followers cell without duplicating rows.
+        """
+        iid = d.reel_url or f"row{self._row_seq + 1}"
+        if self.tree.exists(iid):
+            cur = self.tree.item(iid, "values")
+            idx = cur[0] if cur else str(self._row_seq + 1)
+            self.tree.item(
+                iid,
+                values=(
+                    idx, d.username, d.followers, d.reel_url, d.music_title,
+                    d.music_artist, d.likes, d.status,
+                ),
+            )
+            return
         self._row_seq += 1
         if d.status == "ok":
             tag = "ok"
@@ -463,10 +486,10 @@ class ReelScraperApp(tk.Tk):
         else:
             tag = "warn"
         self.tree.insert(
-            "", tk.END, iid=str(self._row_seq),
+            "", tk.END, iid=iid,
             values=(
-                self._row_seq, d.username, d.reel_url, d.music_title,
-                d.music_artist, d.likes, d.status,
+                str(self._row_seq), d.username, d.followers, d.reel_url,
+                d.music_title, d.music_artist, d.likes, d.status,
             ),
             tags=(tag,),
         )

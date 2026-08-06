@@ -38,14 +38,32 @@ from scraper import (
     write_csv,
 )
 
+# Design tokens — single source of truth (theme.py). No hardcoded colors below.
+from theme import (
+    ACCENT,
+    ACCENT_HI,
+    BG,
+    BG_INPUT,
+    BG_PANEL,
+    BORDER,
+    ERROR,
+    FG,
+    FG_MUTED,
+    MONO,
+    SUCCESS,
+    TITLE,
+    UI,
+    UI_BOLD,
+    WARN,
+)
+
 APP_DIR = Path(__file__).resolve().parent
 RESULTS_DIR = APP_DIR / "results"
 RESULTS_DIR.mkdir(exist_ok=True)
 
-ACCENT = "#0095F6"
-OK_GREEN = "#0A7D32"
-ERR_RED = "#C62828"
-WARN_ORANGE = "#E65100"
+OK_GREEN = SUCCESS
+ERR_RED = ERROR
+WARN_ORANGE = WARN
 
 # Results table column order. "followers" sits at index 2, so "reel_url"
 # is index 3 — always resolve by name, never by hardcoded index.
@@ -62,6 +80,7 @@ class ReelScraperApp(tk.Tk):
         self.title("Instagram Reel Scraper")
         self.geometry("1140x820")
         self.minsize(980, 700)
+        self.configure(bg=BG)
 
         # Thread -> GUI communication (log lines, progress, results)
         self._q: "queue.Queue[tuple]" = queue.Queue()
@@ -86,50 +105,79 @@ class ReelScraperApp(tk.Tk):
             style.theme_use("clam")
         except tk.TclError:
             pass
-        style.configure("Treeview", rowheight=26, font=("Segoe UI", 10))
-        style.configure("Treeview.Heading", font=("Segoe UI", 10, "bold"))
-        style.configure("TButton", font=("Segoe UI", 10))
-        style.configure("TLabel", font=("Segoe UI", 10))
-        style.configure("TLabelframe", font=("Segoe UI", 10))
-        style.configure("TLabelframe.Label", font=("Segoe UI", 10, "bold"))
+        style.configure("Treeview", rowheight=26, font=MONO,
+                        background=BG_PANEL, fieldbackground=BG_PANEL,
+                        foreground=FG, bordercolor=BORDER)
+        style.configure("Treeview.Heading", font=UI_BOLD,
+                        background=BG_PANEL, foreground=FG_MUTED)
+        style.map("Treeview.Heading", background=[("active", BG_INPUT)])
+        style.map("Treeview", background=[("selected", ACCENT)],
+                  foreground=[("selected", "#FFFFFF")])
+        style.configure("TButton", font=UI, background=BG_INPUT, foreground=FG,
+                        bordercolor=BORDER, padding=(10, 5))
+        style.map("TButton",
+                  background=[("active", ACCENT_HI), ("pressed", ACCENT_HI)],
+                  foreground=[("active", "#FFFFFF")])
+        style.configure("Accent.TButton", font=UI_BOLD, background=ACCENT,
+                        foreground="#FFFFFF", bordercolor=ACCENT, padding=(14, 7))
+        style.map("Accent.TButton",
+                  background=[("active", ACCENT_HI), ("pressed", ACCENT_HI)],
+                  foreground=[("active", "#FFFFFF"), ("disabled", "#64748B")])
+        style.configure("TLabel", font=UI, background=BG, foreground=FG)
+        style.configure("Muted.TLabel", font=UI, background=BG, foreground=FG_MUTED)
+        style.configure("TLabelframe", font=UI, background=BG_PANEL,
+                        bordercolor=BORDER, relief=tk.SOLID, borderwidth=1)
+        style.configure("TLabelframe.Label", font=UI_BOLD, background=BG_PANEL,
+                        foreground=FG)
+        style.configure("TEntry", font=MONO, fieldbackground=BG_INPUT,
+                        foreground=FG, insertcolor=FG)
+        style.configure("TSpinbox", font=UI, fieldbackground=BG_INPUT,
+                        foreground=FG, insertcolor=FG)
+        style.configure("TCheckbutton", font=UI, background=BG, foreground=FG)
+        style.map("TCheckbutton", background=[("active", BG)],
+                  foreground=[("active", FG)])
+        style.configure("TProgressbar", troughcolor=BG_INPUT, background=ACCENT,
+                        bordercolor=BORDER, thickness=12)
 
     def _build_ui(self) -> None:
         self.columnconfigure(0, weight=1)
         self.rowconfigure(5, weight=1)  # results area expands
 
-        # ---- header ----
-        header = tk.Frame(self, bg=ACCENT, height=52)
+        # ---- header (dark panel + accent bar + brand) ----
+        header = tk.Frame(self, bg=BG_PANEL, height=58)
         header.grid(row=0, column=0, sticky="ew")
         header.grid_propagate(False)
+        tk.Frame(header, bg=ACCENT, width=3).pack(side=tk.LEFT, fill=tk.Y)
         tk.Label(
             header, text="Instagram Reel Scraper",
-            bg=ACCENT, fg="white",
-            font=("Segoe UI", 15, "bold"),
-        ).pack(side=tk.LEFT, padx=14)
+            bg=BG_PANEL, fg=FG, font=TITLE,
+        ).pack(side=tk.LEFT, padx=(14, 0))
         tk.Label(
-            header, text="scrape reels with your own session - "
-            "username / URL / music info",
-            bg=ACCENT, fg="#E3F2FD", font=("Segoe UI", 9),
-        ).pack(side=tk.LEFT, padx=(4, 0), pady=(6, 0))
+            header, text="reel URL → username / followers / music / likes",
+            bg=BG_PANEL, fg=FG_MUTED, font=UI,
+        ).pack(side=tk.LEFT, padx=(12, 0), pady=(6, 0))
 
         # ---- session bar ----
-        session = ttk.Frame(self, padding=(10, 8))
+        session = tk.Frame(self, bg=BG_PANEL, height=46)
         session.grid(row=1, column=0, sticky="ew")
-        ttk.Label(session, text="Session:").pack(side=tk.LEFT)
-        self.session_lbl = ttk.Label(session, text="checking...")
-        self.session_lbl.pack(side=tk.LEFT, padx=(4, 16))
+        session.grid_propagate(False)
+        tk.Label(session, text="Session:", bg=BG_PANEL, fg=FG_MUTED,
+                 font=UI_BOLD).pack(side=tk.LEFT, padx=(12, 4), pady=11)
+        self.session_lbl = tk.Label(session, text="checking...", bg=BG_PANEL,
+                                    fg=FG, font=UI)
+        self.session_lbl.pack(side=tk.LEFT, padx=(0, 14), pady=11)
         ttk.Button(
             session, text="Login to Instagram",
             command=self._on_login, cursor="hand2",
-        ).pack(side=tk.LEFT, padx=(0, 4))
+        ).pack(side=tk.LEFT, padx=(0, 4), pady=6)
         ttk.Button(
             session, text="Import cookies file",
             command=self._on_import_cookies, cursor="hand2",
-        ).pack(side=tk.LEFT, padx=4)
+        ).pack(side=tk.LEFT, padx=4, pady=6)
         ttk.Button(
             session, text="Clear session",
             command=self._on_clear_session, cursor="hand2",
-        ).pack(side=tk.LEFT, padx=4)
+        ).pack(side=tk.LEFT, padx=4, pady=6)
 
         # ---- URLs input ----
         input_frame = ttk.LabelFrame(
@@ -139,7 +187,8 @@ class ReelScraperApp(tk.Tk):
         input_frame.columnconfigure(0, weight=1)
 
         self.urls_text = tk.Text(
-            input_frame, height=6, font=("Consolas", 10),
+            input_frame, height=6, font=MONO,
+            bg=BG_INPUT, fg=FG, insertbackground=FG,
             relief=tk.SOLID, borderwidth=1, undo=True,
         )
         self.urls_text.grid(row=0, column=0, sticky="nsew", padx=(0, 6))
@@ -204,7 +253,7 @@ class ReelScraperApp(tk.Tk):
         actions.grid(row=4, column=0, sticky="ew")
         self.start_btn = tk.Button(
             actions, text="Start Scraping", command=self._on_start,
-            bg=ACCENT, fg="white", activebackground="#007EDB",
+            bg=ACCENT, fg="white", activebackground=ACCENT_HI,
             activeforeground="white", font=("Segoe UI", 11, "bold"),
             padx=20, cursor="hand2",
         )
@@ -292,8 +341,17 @@ class ReelScraperApp(tk.Tk):
         self.log_text = scrolledtext.ScrolledText(
             log_frame, height=9, font=("Consolas", 9),
             state="disabled", relief=tk.SOLID, borderwidth=1,
+            bg=BG_INPUT, fg=FG, insertbackground=FG,
         )
         self.log_text.grid(row=0, column=0, sticky="ew")
+
+        # ---- status bar ----
+        status = tk.Frame(self, bg=BG_PANEL, height=26)
+        status.grid(row=7, column=0, sticky="ew")
+        status.grid_propagate(False)
+        self.status_lbl = tk.Label(status, text="Ready", bg=BG_PANEL,
+                                   fg=FG_MUTED, font=("Segoe UI", 9))
+        self.status_lbl.pack(side=tk.LEFT, padx=12, pady=4)
 
     # ------------------------------------------------------------------ #
     # Event handlers
@@ -389,6 +447,7 @@ class ReelScraperApp(tk.Tk):
         self.saved_lbl.config(text="")
         self.progress_bar.config(maximum=total, value=0)
         self.progress_lbl.config(text=f"0/{total}")
+        self.status_lbl.config(text="Phase 1/2: scraping reels…", fg=FG)
         self._set_running(True)
         self._append_log(f"[>] Starting with {total} URL(s)...")
         threading.Thread(
@@ -504,6 +563,10 @@ class ReelScraperApp(tk.Tk):
         self._fill_tree(results)
         total = int(self.progress_bar["maximum"]) or 1
         self.progress_lbl.config(text=f"{len(results)}/{total}")
+        ok_count = sum(1 for r in results if r.status == "ok")
+        self.status_lbl.config(
+            text=f"Complete — {ok_count}/{len(results)} ok", fg=SUCCESS
+        )
 
         enabled = tk.NORMAL if results else tk.DISABLED
         for btn in (self.csv_btn, self.excel_btn, self.json_btn, self.copy_btn):
@@ -664,7 +727,12 @@ class ReelScraperApp(tk.Tk):
                 item = self._q.get_nowait()
                 kind = item[0]
                 if kind == "log":
-                    self._append_log(item[1])
+                    msg = item[1]
+                    self._append_log(msg)
+                    if "Auto-scraping profiles" in msg:
+                        self.status_lbl.config(text="Phase 2/2: fetching followers…", fg=FG)
+                    elif msg.startswith("[OK] Done"):
+                        self.status_lbl.config(text="Phase 1/2 complete", fg=SUCCESS)
                 elif kind == "progress":
                     done, total = item[1], item[2]
                     self.progress_bar.config(maximum=total, value=done)

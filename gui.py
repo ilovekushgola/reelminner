@@ -198,7 +198,7 @@ class ReelScraperApp(tk.Tk):
             "https://www.instagram.com/reels/DfGh456EfGh/\n",
         )
 
-        btn_col = tk.Frame(input_frame)
+        btn_col = tk.Frame(input_frame, bg=BG_PANEL)
         btn_col.grid(row=0, column=1, sticky="ns")
         ttk.Button(
             btn_col, text="Load URLs from file",
@@ -210,12 +210,13 @@ class ReelScraperApp(tk.Tk):
             cursor="hand2",
         ).pack(fill=tk.X)
 
-        # ---- options ----
-        opts = ttk.Frame(self, padding=(10, 0))
-        opts.grid(row=3, column=0, sticky="ew")
+        # ---- options (grouped card) ----
+        opts = tk.Frame(self, bg=BG_PANEL, relief=tk.SOLID, borderwidth=1,
+                        highlightbackground=BORDER, highlightthickness=1)
+        opts.grid(row=3, column=0, sticky="ew", padx=10, pady=(0, 8))
 
         ttk.Label(opts, text="Parallel workers (browser windows):").pack(
-            side=tk.LEFT, padx=(0, 4)
+            side=tk.LEFT, padx=(10, 4), pady=8
         )
         self.workers_var = tk.StringVar(value="3")
         ttk.Spinbox(
@@ -232,40 +233,52 @@ class ReelScraperApp(tk.Tk):
         ).pack(side=tk.LEFT, padx=(0, 16))
 
         self.headless_var = tk.BooleanVar(value=False)
-        ttk.Checkbutton(
-            opts, text="Headless (invisible browsers)",
+        tk.Checkbutton(
+            opts, text="Headless (invisible browsers)", bg=BG_PANEL, fg=FG,
+            activebackground=BG_PANEL, activeforeground=FG,
+            selectcolor=BG_INPUT, font=UI, cursor="hand2",
             variable=self.headless_var,
         ).pack(side=tk.LEFT, padx=(0, 16))
 
         self.auto_save_var = tk.BooleanVar(value=True)
-        ttk.Checkbutton(
-            opts, text="Auto-save CSV when done", variable=self.auto_save_var
+        tk.Checkbutton(
+            opts, text="Auto-save CSV when done", bg=BG_PANEL, fg=FG,
+            activebackground=BG_PANEL, activeforeground=FG,
+            selectcolor=BG_INPUT, font=UI, cursor="hand2",
+            variable=self.auto_save_var,
         ).pack(side=tk.LEFT, padx=(16, 0))
 
         self.auto_profiles_var = tk.BooleanVar(value=True)
-        ttk.Checkbutton(
-            opts, text="Auto-scrape profiles (followers)",
+        tk.Checkbutton(
+            opts, text="Auto-scrape profiles (followers)", bg=BG_PANEL, fg=FG,
+            activebackground=BG_PANEL, activeforeground=FG,
+            selectcolor=BG_INPUT, font=UI, cursor="hand2",
             variable=self.auto_profiles_var,
         ).pack(side=tk.LEFT, padx=(16, 0))
 
         # ---- actions ----
-        actions = ttk.Frame(self, padding=(10, 8))
+        actions = ttk.Frame(self, padding=(10, 4))
         actions.grid(row=4, column=0, sticky="ew")
         self.start_btn = tk.Button(
             actions, text="Start Scraping", command=self._on_start,
             bg=ACCENT, fg="white", activebackground=ACCENT_HI,
-            activeforeground="white", font=("Segoe UI", 11, "bold"),
-            padx=20, cursor="hand2",
+            activeforeground="white", disabledforeground="#D1D5DB",
+            font=("Segoe UI", 11, "bold"),
+            padx=20, cursor="hand2", relief=tk.FLAT,
         )
         self.start_btn.pack(side=tk.LEFT)
         self.stop_btn = tk.Button(
             actions, text="Stop", command=self._on_stop,
             state=tk.DISABLED, padx=16, cursor="hand2",
+            bg=BG_PANEL, fg=ERROR, activebackground=BG_INPUT,
+            activeforeground=ERROR, disabledforeground="#64748B",
+            font=("Segoe UI", 10, "bold"), relief=tk.SOLID,
+            borderwidth=1, highlightbackground=BORDER,
         )
         self.stop_btn.pack(side=tk.LEFT, padx=(8, 16))
         self.progress_bar = ttk.Progressbar(actions, mode="determinate")
         self.progress_bar.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(0, 8))
-        self.progress_lbl = ttk.Label(actions, text="0/0", width=8)
+        self.progress_lbl = ttk.Label(actions, text="0/0", width=8, font=MONO)
         self.progress_lbl.pack(side=tk.LEFT)
 
         # ---- results ----
@@ -506,7 +519,8 @@ class ReelScraperApp(tk.Tk):
     def _set_running(self, running: bool) -> None:
         self._running = running
         self.start_btn.config(
-            state=tk.DISABLED if running else tk.NORMAL
+            state=tk.DISABLED if running else tk.NORMAL,
+            bg="#64748B" if running else ACCENT,
         )
         self.stop_btn.config(
             state=tk.NORMAL if running else tk.DISABLED

@@ -118,12 +118,65 @@ Scraping is against Instagram's Terms of Service. This tool is intended for
 respect rate limits; excessive automation can get accounts flagged. No
 copyrighted content is downloaded by default - only metadata.
 
+## AI Agent / MCP Usage
+
+The tool ships an **MCP server** (`mcp_server.py`, stdio transport) so AI
+agents can drive the scraper directly — no GUI needed.
+
+### Tools (5)
+
+| Tool | Params | Returns |
+|---|---|---|
+| `scrape_reels` | `urls: list[str]`, `workers?`, `delay?`, `headless?`, `with_profiles?` | `{results: [{reel_url, username, followers, music_title, music_artist, likes, comments, plays, status}]}` |
+| `get_status` | — | `{session_ready, last_run: {total, ok}}` |
+| `import_cookies` | `json_path: str` | `{imported, path}` |
+| `stop_scrape` | — | `{stopped}` |
+| `export_results` | `path: str`, `fmt: "csv"\|"xlsx"\|"json"` | `{exported, rows}` |
+
+### Client config (Claude Desktop / Cursor / AionUi)
+
+Add to your MCP client config (also shipped as `.mcp.json` in this repo):
+
+```json
+{
+  "mcpServers": {
+    "instagram-reel-scraper": {
+      "command": "python",
+      "args": ["mcp_server.py"],
+      "cwd": "E:\\Download\\Code\\AionUi\\Work Directory\\conversations\\2026\\08\\06\\aionrs-temp-500e1eff\\instagram-reel-scraper",
+      "env": { "IRS_HEADLESS": "true" }
+    }
+  }
+}
+```
+
+Environment overrides (see `mcp.env.example`): `IRS_HEADLESS`,
+`IRS_WORKERS`, `IRS_DELAY`, `IRS_WITH_PROFILES`.
+
+### Example agent flow
+
+1. `get_status` — verify `session_ready: true` (else `import_cookies` first).
+2. `scrape_reels` with the reel URLs and `with_profiles: true` — results
+   include each owner's followers count.
+3. `export_results` to `results/agent_export.csv` (or `.xlsx`/`.json`).
+4. If a scrape hangs, call `stop_scrape` — exactly one scrape runs at a time.
+
+> Heads-up for agents: run reels with a **delay ≥ 1s** and modest `workers`
+> (2-3) to avoid Instagram rate-limit walls. `session_expired` status means
+> the saved cookies are stale — tell the user to re-login.
+
 ## Project layout
 
 ```
 instagram-reel-scraper/
 ├── gui.py              # tkinter desktop app (python gui.py)
 ├── scraper.py          # engine + CLI (python scraper.py --help)
+├── mcp_server.py       # MCP server for AI agents (python mcp_server.py)
+├── theme.py            # UI design tokens (colors/fonts)
+├── build_exe.py        # PyInstaller build (dist\InstagramReelScraper.exe)
+├── InstagramReelScraper.spec
+├── installer/          # Inno Setup installer (install.bat)
+├── skills/             # agent SKILL.md (docs for AI agents)
 ├── requirements.txt
 ├── storage_state.json  # created at first login (git-ignored)
 └── results/            # auto-saved CSVs (git-ignored)

@@ -1,0 +1,12 @@
+{
+  "mcpServers": {
+    "instagram-reel-scraper": {
+      "command": "python",
+      "args": ["mcp_server.py"],
+      "cwd": "E:\\Download\\Code\\AionUi\\Work Directory\\conversations\\2026\\08\\06\\aionrs-temp-500e1eff\\instagram-reel-scraper",
+      "env": {
+        "IRS_HEADLESS": "true"
+      }
+    }
+  }
+}

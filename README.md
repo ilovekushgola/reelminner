@@ -47,7 +47,8 @@
 - [⚠️ Legal & ethical disclaimer](#️-legal--ethical-disclaimer)
 - [🤝 Contributing](#-contributing)
 - [📄 License](#-license)
-- [🏷️ Name options](#-name-options)
+- [🆘 Troubleshooting & FAQ](#-troubleshooting--faq)
+- [🏷️ Name](#-name)
 
 ---
 
@@ -214,7 +215,7 @@ handling, and rate‑limiting identical across every entry point.
 
 ```bash
 # 1. Clone
-git clone https://github.com/<you>/reelminner.git
+git clone https://github.com/ilovekushgola/reelminner.git
 cd reelminner
 
 # 2. (Recommended) create a virtual environment
@@ -237,6 +238,12 @@ Optional dev/test tools:
 ```bash
 pip install -r requirements-dev.txt   # pytest, coverage
 ```
+
+> 💡 **Before you start:** Reelminner works best with a logged‑in Instagram session —
+> some reels and *all* owner/follower data require authentication. Run
+> `python scraper.py --login` once (interactive QR), or import cookies exported from the
+> **EditThisCookie** browser extension with `python scraper.py --import-cookies cookies.json`.
+> It only reads **public** content you're already allowed to view.
 
 ---
 
@@ -482,6 +489,40 @@ Output: `dist/Reelminner.exe` (one‑file build via `Reelminner.spec`).
 
 ---
 
+## 🆘 Troubleshooting & FAQ
+
+**`playwright` says the browser isn't installed / pages won't open**
+→ Make sure you ran both `pip install -r requirements.txt` **and**
+`playwright install chromium`. Without the Chromium download nothing will launch.
+
+**Most fields are empty, or I get `BLOCKED` / `RATE_LIMITED`**
+→ Log in (`python scraper.py --login`) or import cookies, then slow down:
+`--delay 4` and fewer workers (`-w 1`). Instagram throttles anonymous/unauthenticated
+traffic hardest, so an authenticated session is the single biggest success factor.
+
+**A reel returns `NO_DATA`**
+→ The post may be private, deleted, or region‑locked, or Instagram served a login wall.
+Try again with a logged‑in session.
+
+**The GUI window won't open or fonts look wrong**
+→ The GUI uses Python's built‑in `tkinter`. On Windows it's most polished. On Linux/macOS
+install the Tk package if the window fails to launch (e.g. `sudo apt install python3-tk`).
+
+**`ModuleNotFoundError` when I run a script**
+→ You're likely outside the repo or its virtual environment. `cd` into the project folder
+and activate the venv (`.venv\Scripts\activate` on Windows, `source .venv/bin/activate`
+on macOS/Linux) before running `python scraper.py`.
+
+**How do I scrape lots of reels at once?**
+→ Put one URL per line in a text file and run
+`python scraper.py -f urls.txt -o out.csv`.
+
+**Can an AI agent use this?**
+→ Yes — run `python mcp_server.py` and point any MCP client (Claude Desktop, Cursor, etc.)
+at the included `.mcp.json`. See [MCP Server](#3-mcp-server-for-ai-agents).
+
+---
+
 ## 🤝 Contributing
 
 1. Fork the repo and create a feature branch.
@@ -497,18 +538,10 @@ Released under the **MIT License** — see [LICENSE](LICENSE).
 
 ---
 
-## 🏷️ Name options
+## 🏷️ Name
 
-We ship under the short, memorable name **Reelminner**. If you prefer something else
-for your fork, here are alternatives that fit the same tool:
-
-- **Reelminner** ⭐ (current) — fast, catchy, implies grabbing reels.
-- **ReelMiner** — emphasizes data mining.
-- **Reelytics** — reels + analytics (great if you focus on follower/music stats).
-- **ReelScout** — discovery‑oriented.
-- **ReelPull** — straightforward “pull the data”.
-- **SnagReel** — casual, friendly.
-
-Just rename the repo and the title in `gui.py` / this README to match.
+The project's final public name is **Reelminner** ("Reel miner"). Earlier internal
+codenames have been retired. If you fork it you can rename it to anything you like —
+just update the title in `gui.py` and this README.
 
 <p align="center">Made with ❤️ for the open‑source scraping community.</p>

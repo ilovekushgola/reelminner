@@ -10,7 +10,7 @@ if str(PROJECT) not in sys.path:
 
 import mcp_server  # noqa: E402
 
-SKILL = PROJECT / "skills" / "instagram-reel-scraper" / "SKILL.md"
+SKILL = PROJECT / "skills" / "reelminner" / "SKILL.md"
 
 
 def test_skill_documents_all_tools():
@@ -26,7 +26,7 @@ def test_skill_frontmatter_valid():
     m = re.match(r"^---\n(.*?)\n---\n", doc, re.DOTALL)
     assert m, "SKILL.md must start with YAML frontmatter"
     fm = m.group(1)
-    assert "name: instagram-reel-scraper" in fm
+    assert "name: reelminner" in fm
     assert "description:" in fm
 
 
@@ -46,7 +46,7 @@ def test_mirror_copy_in_sync():
         PROJECT.parent
         / ".aionrs"
         / "skills"
-        / "instagram-reel-scraper"
+        / "reelminner"
         / "SKILL.md"
     )
     assert mirror.exists(), "mirror copy missing in .aionrs/skills/"

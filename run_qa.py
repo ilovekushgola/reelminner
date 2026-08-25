@@ -20,7 +20,7 @@ import time
 from datetime import datetime
 from pathlib import Path
 
-from scraper import InstagramReelScraper, write_csv
+from scraper import Reelminner, write_csv
 
 PROJECT = Path(__file__).resolve().parent
 CORPUS = PROJECT / "tests" / "corpus.txt"
@@ -136,7 +136,7 @@ def main() -> int:
     if args.quick:
         urls = urls[:1]
 
-    scraper = InstagramReelScraper(headless=headless, workers=workers, delay=delay)
+    scraper = Reelminner(headless=headless, workers=workers, delay=delay)
     if not scraper.has_session():
         print("[x] FAIL: no valid session. Re-import cookies (storage_state.json).")
         return 1

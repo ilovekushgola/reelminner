@@ -10,9 +10,9 @@
 
 ## Global Constraints
 
-- Project root (all paths relative to it): `E:\Download\Code\AionUi\Work Directory\conversations\2026\08\06\aionrs-temp-500e1eff\instagram-reel-scraper`
+- Project root (all paths relative to it): `E:\Download\Code\AionUi\Work Directory\conversations\2026\08\06\aionrs-temp-500e1eff\reelminner`
 - Corpus: the 12 reel URLs from the spec, verbatim, one per line in `tests/corpus.txt`.
-- Session: `storage_state.json` with the user's cookies (already injected and verified as @ilovekushgola). `InstagramReelScraper.has_session()` must return True before any QA run.
+- Session: `storage_state.json` with the user's cookies (already injected and verified as @ilovekushgola). `Reelminner.has_session()` must return True before any QA run.
 - Browsers: full QA runs MUST be visible (`headless=False`). Headless is allowed only in `--quick` mode (1 URL). Rationale (learned 2026-08-06): rapid headless requests get throttled by Instagram (60s nav timeouts, blank pages).
 - QA run settings: workers = 2, delay = 2.0s per worker (plus existing 0–1.5s jitter). Never exceed workers=4 / delay < 1.0s in QA runs.
 - Gates (all must pass): engine crash-free; ok_rate ≥ 0.75; username fill ≥ 0.80; music fill ≥ 0.60 (licensed reels only, see Task 5 `is_original_audio`); zero `session_expired`; runtime ≤ 1800s.
@@ -42,7 +42,7 @@
 - [ ] **Step 1: git init + baseline commit**
 
 ```powershell
-cd "E:\Download\Code\AionUi\Work Directory\conversations\2026\08\06\aionrs-temp-500e1eff\instagram-reel-scraper"
+cd "E:\Download\Code\AionUi\Work Directory\conversations\2026\08\06\aionrs-temp-500e1eff\reelminner"
 git init
 git add .gitignore gui.py scraper.py README.md requirements.txt
 git commit -m "chore: baseline reel scraper (engine + GUI)"
@@ -333,7 +333,7 @@ Change the import in `gui.py` from:
 from scraper import (
     DEFAULT_STATE_FILE,
     REEL_URL_RE,
-    InstagramReelScraper,
+    Reelminner,
     export_excel,
     export_json,
     write_csv,
@@ -345,7 +345,7 @@ to:
 ```python
 from scraper import (
     DEFAULT_STATE_FILE,
-    InstagramReelScraper,
+    Reelminner,
     export_excel,
     export_json,
     normalize_reel_url,
@@ -755,7 +755,7 @@ git commit -m "feat: likes/comments/plays parser with tests"
 
 **Interfaces:**
 - Consumes: all parsers from Tasks 1–4.
-- Produces: `ReelData` gains `is_original_audio: bool = False` (new CSV column, appended last in `csv_columns()`); `InstagramReelScraper._extract(page) -> ReelData` now calls the parsers on `page.content()` first and keeps only DOM evaluations as secondary fallbacks (article-header anchor for username, `liked_by`/`comments` spans for counts).
+- Produces: `ReelData` gains `is_original_audio: bool = False` (new CSV column, appended last in `csv_columns()`); `Reelminner._extract(page) -> ReelData` now calls the parsers on `page.content()` first and keeps only DOM evaluations as secondary fallbacks (article-header anchor for username, `liked_by`/`comments` spans for counts).
 
 - [ ] **Step 1: Write the failing tests (stub-page wiring test)**
 
@@ -764,7 +764,7 @@ git commit -m "feat: likes/comments/plays parser with tests"
 ```python
 from pathlib import Path
 
-from scraper import InstagramReelScraper
+from scraper import Reelminner
 
 FIX = Path(__file__).resolve().parent / "fixtures"
 
@@ -787,7 +787,7 @@ class StubPage:
 
 
 def make_scraper():
-    return InstagramReelScraper(headless=True, workers=1, delay=0)
+    return Reelminner(headless=True, workers=1, delay=0)
 
 
 def test_extract_full_fixture():
@@ -968,7 +968,7 @@ git commit -m "refactor: wire unit-tested parsers into engine; add is_original_a
 - Create: `tests/test_session_and_export.py`
 
 **Interfaces:**
-- Consumes: `InstagramReelScraper.save_cookies_from_file`, `has_session`, `clear_session`; `write_csv`, `export_json`, `export_excel`; `ReelData`.
+- Consumes: `Reelminner.save_cookies_from_file`, `has_session`, `clear_session`; `write_csv`, `export_json`, `export_excel`; `ReelData`.
 - Produces: nothing new — locks existing behavior against regressions, including the new `is_original_audio` CSV column from Task 5.
 
 - [ ] **Step 1: Write the tests**
@@ -981,7 +981,7 @@ from pathlib import Path
 
 import pytest
 
-from scraper import InstagramReelScraper, ReelData, export_excel, export_json, write_csv
+from scraper import Reelminner, ReelData, export_excel, export_json, write_csv
 
 TMP = Path(__file__).resolve().parent / "_tmp"
 TMP.mkdir(exist_ok=True)
@@ -998,7 +998,7 @@ EDITTHISCOOKIE = [
 
 @pytest.fixture()
 def scraper(tmp_path):
-    return InstagramReelScraper(state_file=tmp_path / "state.json")
+    return Reelminner(state_file=tmp_path / "state.json")
 
 
 def test_import_editthiscookie_format(scraper):
@@ -1101,7 +1101,7 @@ git commit -m "test: session import/expiry + CSV/JSON/Excel export regression su
 - Create: `tests/test_qa_metrics.py`
 
 **Interfaces:**
-- Consumes: `InstagramReelScraper` (headless/workers/delay/has_session/scrape/stop), `ReelData` (incl. `is_original_audio`), `write_csv`; `tests/corpus.txt`.
+- Consumes: `Reelminner` (headless/workers/delay/has_session/scrape/stop), `ReelData` (incl. `is_original_audio`), `write_csv`; `tests/corpus.txt`.
 - Produces: `run_qa.py` CLI with flags `--corpus`, `--url` (repeatable), `--workers`, `--delay`, `--quick`, `--headless`, `--report-only`; artifacts `results/qa/qa_report.json`, `results/qa/qa_results.csv`; exit code 0 iff all gates pass, else 1. Module-level `compute_metrics(results, runtime_s) -> dict`, `evaluate_gates(metrics) -> list[(name, passed)]`, `GATES` list — unit-tested here and reused in Task 8.
 
 - [ ] **Step 1: Write the failing metric/gate tests**
@@ -1195,7 +1195,7 @@ import time
 from datetime import datetime
 from pathlib import Path
 
-from scraper import InstagramReelScraper, write_csv
+from scraper import Reelminner, write_csv
 
 PROJECT = Path(__file__).resolve().parent
 CORPUS = PROJECT / "tests" / "corpus.txt"
@@ -1311,7 +1311,7 @@ def main() -> int:
     if args.quick:
         urls = urls[:1]
 
-    scraper = InstagramReelScraper(headless=headless, workers=workers, delay=delay)
+    scraper = Reelminner(headless=headless, workers=workers, delay=delay)
     if not scraper.has_session():
         print("[x] FAIL: no valid session. Re-import cookies (storage_state.json).")
         return 1
@@ -1368,7 +1368,7 @@ git commit -m "feat: QA harness run_qa.py with data-quality gates + tests"
 
 - [ ] **Step 1: Ensure session is valid**
 
-Run: `python -c "from scraper import InstagramReelScraper; print('session ok' if InstagramReelScraper().has_session() else 'NO SESSION')"`
+Run: `python -c "from scraper import Reelminner; print('session ok' if Reelminner().has_session() else 'NO SESSION')"`
 Expected: `session ok`. If `NO SESSION`, run `python scraper.py --import-cookies cookies_export.json` first.
 
 - [ ] **Step 2: Run the full QA**
@@ -1649,7 +1649,7 @@ git commit -m "improve: single auto-retry for transient timeout/error reels"
 - [ ] **Step 1: Move the baseline notes into the repo**
 
 ```powershell
-cd "E:\Download\Code\AionUi\Work Directory\conversations\2026\08\06\aionrs-temp-500e1eff\instagram-reel-scraper"
+cd "E:\Download\Code\AionUi\Work Directory\conversations\2026\08\06\aionrs-temp-500e1eff\reelminner"
 New-Item -ItemType Directory -Force docs\qa | Out-Null
 Copy-Item results\qa\run-1-notes.md docs\qa\run-1-notes.md -ErrorAction SilentlyContinue
 ```

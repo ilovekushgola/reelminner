@@ -10,7 +10,7 @@
 
 ## Global Constraints
 
-- All paths relative to `instagram-reel-scraper/` unless absolute.
+- All paths relative to `reelminner/` unless absolute.
 - The 58 existing tests must keep passing; new tests use pytest.
 - No emoji as icons. Unicode glyphs (`▶`, `■`) are allowed only in the tool window; keep all brand visuals in code (canvas) or generated assets.
 - Every entry point must work both as `.py` and frozen inside the `.exe` (guard paths with `getattr(sys, "_MEIPASS", Path(__file__).parent)`).
@@ -47,7 +47,7 @@
 
 **DISPATCH**
 ```
-ROLE: Python/Tkinter test-first engineer working in instagram-reel-scraper/.
+ROLE: Python/Tkinter test-first engineer working in reelminner/.
 CONTEXT: gui.py builds a results Treeview with columns
 ("idx","username","followers","reel_url","music","artist","likes","status").
 "followers" was inserted at index 2, so "reel_url" moved to index 3 — but
@@ -73,27 +73,27 @@ DONE WHEN: new tests green, full suite green, commit
 
 ### Task 2: PyInstaller spec + build script + launch smoke
 
-**Skills:** `python-executor`, `e2e-testing`, `verification-before-completion` · **Files:** Create `build_exe.py`, `InstagramReelScraper.spec`, `assets/icon.ico`
+**Skills:** `python-executor`, `e2e-testing`, `verification-before-completion` · **Files:** Create `build_exe.py`, `Reelminner.spec`, `assets/icon.ico`
 
 **DISPATCH**
 ```
 ROLE: Windows packaging engineer (PyInstaller 6.21 installed).
 CONTEXT: Entry point gui.py; deps: playwright, pandas, openpyxl, tkinter.
-Target: one-file, windowed (no console) exe named InstagramReelScraper.exe.
+Target: one-file, windowed (no console) exe named Reelminner.exe.
 TASK: Produce a reproducible build script + spec, build, and smoke-launch.
 STEPS:
 1. assets/make_icon.py -> 128px ICO (indigo rounded square + white play
    triangle, Pillow) written to assets/icon.ico.
-2. InstagramReelScraper.spec: onefile=True, console=False, name=
-   "InstagramReelScraper", icon=assets/icon.ico,
+2. Reelminner.spec: onefile=True, console=False, name=
+   "Reelminner", icon=assets/icon.ico,
    hiddenimports=["playwright.sync_api","playwright._impl._driver",
    "pandas","openpyxl","openpyxl.cell._writer","email","email.mime"],
    datas=[("storage_state.json",".")] only if the file exists at build time.
-3. build_exe.py: runs `pyinstaller InstagramReelScraper.spec --noconfirm`,
-   prints dist\\InstagramReelScraper.exe + size when done, exits non-zero on error.
+3. build_exe.py: runs `pyinstaller Reelminner.spec --noconfirm`,
+   prints dist\\Reelminner.exe + size when done, exits non-zero on error.
 4. python build_exe.py -> exe exists and is > 5 MB.
 5. Launch the exe; window opens, no console flash; close it.
-6. Run dist\\InstagramReelScraper.exe with a --selftest flag stub that prints
+6. Run dist\\Reelminner.exe with a --selftest flag stub that prints
    "SELFTEST OK" via a temp file (windowed exes have no stdout): write
    dist\\selftest_report.txt and exit 0. (Implement --selftest in gui.py main:
    argparse; if set, write report and sys.exit(0) without creating the window.)
@@ -104,26 +104,26 @@ DONE WHEN: exe >5MB, launches, selftest file written, commit
 
 ### Task 3: Inno Setup installer + silent-install verification
 
-**Skills:** `e2e-testing`, `verification-loop` · **Files:** Create `installer/InstagramReelScraper.iss`, `installer/install.bat`, `installer/SIGNING.md`
+**Skills:** `e2e-testing`, `verification-loop` · **Files:** Create `installer/Reelminner.iss`, `installer/install.bat`, `installer/SIGNING.md`
 
 **DISPATCH**
 ```
 ROLE: Windows installer engineer (Inno Setup 6).
-CONTEXT: dist\\InstagramReelScraper.exe exists from Task 2. Inno Setup may
+CONTEXT: dist\\Reelminner.exe exists from Task 2. Inno Setup may
 not be installed — check ISCC.exe on PATH or
 "C:\\Program Files (x86)\\Inno Setup 6\\ISCC.exe"; if absent,
 `winget install --id JRSoftware.InnoSetup -e` (fallback `choco install innosetup`).
 TASK: Author the installer, build it, and verify install/uninstall on Windows.
 STEPS:
-1. installer/InstagramReelScraper.iss: AppName "Instagram Reel Scraper",
-   version 1.0.0, DefaultDirName {autopf}\\InstagramReelScraper,
+1. installer/Reelminner.iss: AppName "Instagram Reel Scraper",
+   version 1.0.0, DefaultDirName {autopf}\\Reelminner,
    PrivilegesRequired=lowest, OutputDir=..\\dist,
-   OutputBaseFilename=InstagramReelScraper-Setup, lzma2 compression,
+   OutputBaseFilename=Reelminner-Setup, lzma2 compression,
    [Files] the exe, [Icons] Start Menu + desktop (Tasks: desktopicon),
    [Run] postinstall launch (skipifsilent).
 2. installer/install.bat: `"%ProgramFiles(x86)%\\Inno Setup 6\\ISCC.exe"
-   InstagramReelScraper.iss`.
-3. Run installer\\install.bat -> dist\\InstagramReelScraper-Setup.exe exists.
+   Reelminner.iss`.
+3. Run installer\\install.bat -> dist\\Reelminner-Setup.exe exists.
 4. Verify: Setup.exe /VERYSILENT /DIR="%TEMP%\\irs-install" -> exe present;
    launch it; then run the uninstaller from the install dir; confirm removal.
 5. installer/SIGNING.md documents that the Setup exe is unsigned today and
@@ -274,7 +274,7 @@ DONE WHEN: shortcuts work, focus visible, commit
 **DISPATCH**
 ```
 ROLE: MCP server engineer (MCP SDK 1.26, FastMCP importable).
-CONTEXT: scraper.py exposes InstagramReelScraper(headless, workers, delay)
+CONTEXT: scraper.py exposes Reelminner(headless, workers, delay)
 with .scrape(urls, with_profiles=True) returning ReelData list; import
 DEFAULT_STATE_FILE from scraper. Server runs on stdio; agents call it.
 TASK: Implement mcp_server.py with exactly these 5 tools and a testable
@@ -314,11 +314,11 @@ DONE WHEN: unit + Inspector smoke pass, commit "feat: FastMCP stdio server (5 to
 ROLE: MCP integration engineer for AionUi + Claude Desktop + Cursor.
 TASK: Ship client configs and register the server in AionUi.
 STEPS:
-1. .mcp.json: {"mcpServers":{"instagram-reel-scraper":{"command":"python",
-   "args":["mcp_server.py"],"cwd":"<ABS_REPO>/instagram-reel-scraper",
-   "env":{"IRS_HEADLESS":"true"}}}} (use the real absolute path).
-2. mcp.env.example documents IRS_HEADLESS, IRS_WORKERS, IRS_DELAY,
-   IRS_WITH_PROFILES (server reads them as scrape defaults).
+1. .mcp.json: {"mcpServers":{"reelminner":{"command":"python",
+   "args":["mcp_server.py"],"cwd":"<ABS_REPO>/reelminner",
+   "env":{"RMIN_HEADLESS":"true"}}}} (use the real absolute path).
+2. mcp.env.example documents RMIN_HEADLESS, RMIN_WORKERS, RMIN_DELAY,
+   RMIN_WITH_PROFILES (server reads them as scrape defaults).
 3. Register in AionUi via the aionui-config skill (check its MCP-registry
    docs; add the stdio entry; verify it appears in the UI).
 4. README section "AI Agent / MCP Usage": config snippet + tool table
@@ -334,7 +334,7 @@ DONE WHEN: configs parse, AionUi shows the server, README updated, commit
 
 ### Task 11: SKILL.md for AI agents (validated against MCP)
 
-**Skills:** `skill-creator`, `skill-tester`, `skill-reviewer`, `writing-guidelines` · **Files:** Create `skills/instagram-reel-scraper/SKILL.md`, mirror to `.aionrs/skills/instagram-reel-scraper/SKILL.md`, Create `tests/test_skill_matches_mcp.py`
+**Skills:** `skill-creator`, `skill-tester`, `skill-reviewer`, `writing-guidelines` · **Files:** Create `skills/reelminner/SKILL.md`, mirror to `.aionrs/skills/reelminner/SKILL.md`, Create `tests/test_skill_matches_mcp.py`
 
 **DISPATCH**
 ```
@@ -342,7 +342,7 @@ ROLE: Skill author (skill-creator conventions).
 CONTEXT: MCP tools from Task 9: scrape_reels, get_status, import_cookies,
 stop_scrape, export_results. CLI: python scraper.py <urls...> [--no-profiles]
 [--workers N] [--delay N] [--headless].
-TASK: Author SKILL.md with YAML frontmatter (name: instagram-reel-scraper;
+TASK: Author SKILL.md with YAML frontmatter (name: reelminner;
 description: "Scrape Instagram reels + followers via Playwright user session.
 MCP tools: scrape_reels, get_status, import_cookies, stop_scrape,
 export_results.") then sections:
@@ -403,7 +403,7 @@ DONE WHEN: all gates pass, commit "chore: final integration gate" + tag.
 ## Final Gate Checklist (run once, before tag)
 
 - [ ] `pytest tests -q` all green
-- [ ] `dist\InstagramReelScraper.exe` + `dist\InstagramReelScraper-Setup.exe` built fresh
+- [ ] `dist\Reelminner.exe` + `dist\Reelminner-Setup.exe` built fresh
 - [ ] Silent install → launch → uninstall verified
 - [ ] MCP Inspector: 5 tools, scrape with followers, stop works
 - [ ] SKILL.md ↔ registered_tools() match

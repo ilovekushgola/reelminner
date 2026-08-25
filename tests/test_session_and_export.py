@@ -3,7 +3,7 @@ from pathlib import Path
 
 import pytest
 
-from scraper import InstagramReelScraper, ReelData, export_excel, export_json, write_csv
+from scraper import Reelminner, ReelData, export_excel, export_json, write_csv
 
 TMP = Path(__file__).resolve().parent / "_tmp"
 TMP.mkdir(exist_ok=True)
@@ -20,7 +20,7 @@ EDITTHISCOOKIE = [
 
 @pytest.fixture()
 def scraper(tmp_path):
-    return InstagramReelScraper(state_file=tmp_path / "state.json")
+    return Reelminner(state_file=tmp_path / "state.json")
 
 
 def test_import_editthiscookie_format(scraper):
@@ -84,7 +84,10 @@ def test_csv_roundtrip_includes_new_column(tmp_path):
     out = tmp_path / "r.csv"
     write_csv([d], out)
     lines = out.read_text(encoding="utf-8-sig").splitlines()
-    assert lines[0].split(",")[-1] == "is_original_audio"
+    header = lines[0].split(",")
+    # Backward compatible: is_original_audio is still present, new fields appended.
+    assert "is_original_audio" in header
+    assert header[-1] == "reels_count"
     assert "True" in lines[1]
 
 

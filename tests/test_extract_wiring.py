@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from scraper import InstagramReelScraper
+from scraper import Reelminner
 
 FIX = Path(__file__).resolve().parent / "fixtures"
 
@@ -23,7 +23,7 @@ class StubPage:
 
 
 def make_scraper():
-    return InstagramReelScraper(headless=True, workers=1, delay=0)
+    return Reelminner(headless=True, workers=1, delay=0)
 
 
 def test_extract_full_fixture():
@@ -48,7 +48,9 @@ def test_extract_original_audio_fixture():
 def test_reel_data_has_new_csv_column():
     from scraper import ReelData
     cols = ReelData.csv_columns()
-    assert cols[-1] == "is_original_audio"
+    # New fields are appended after is_original_audio (backward compatible).
+    assert "is_original_audio" in cols
+    assert cols[-1] == "reels_count"
     d = ReelData()
     assert d.is_original_audio is False
     assert d.to_dict()["is_original_audio"] is False

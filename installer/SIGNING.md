@@ -1,6 +1,6 @@
 # Signing notes
 
-The `InstagramReelScraper-Setup.exe` produced by this installer is **unsigned**.
+The `Reelminner-Setup.exe` produced by this installer is **unsigned**.
 Windows SmartScreen will warn users ("Windows protected your PC") until the
 installer is code-signed.
 
@@ -11,19 +11,19 @@ installer is code-signed.
 2. Sign the **Setup exe** with `signtool` (Windows SDK):
 
    ```powershell
-   signtool sign /fd SHA256 /a /tr http://timestamp.digicert.com /td SHA256 /f mycert.pfx /p <password> dist\InstagramReelScraper-Setup.exe
+   signtool sign /fd SHA256 /a /tr http://timestamp.digicert.com /td SHA256 /f mycert.pfx /p <password> dist\Reelminner-Setup.exe
    ```
 
 3. Sign the **app exe** too (defeats SmartScreen for the app itself):
 
    ```powershell
-   signtool sign /fd SHA256 /a /tr http://timestamp.digicert.com /td SHA256 /f mycert.pfx /p <password> dist\InstagramReelScraper.exe
+   signtool sign /fd SHA256 /a /tr http://timestamp.digicert.com /td SHA256 /f mycert.pfx /p <password> dist\Reelminner.exe
    ```
 
 4. Verify:
 
    ```powershell
-   signtool verify /pa dist\InstagramReelScraper-Setup.exe
+   signtool verify /pa dist\Reelminner-Setup.exe
    ```
 
 5. (Optional) Submit the signed file to Microsoft SmartScreen for reputation:

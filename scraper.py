@@ -14,12 +14,15 @@ from __future__ import annotations
 
 import csv
 import json
+import os
 import queue
 import random
 import sys
+import logging
 import threading
 import time
 from dataclasses import asdict, dataclass
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Callable, List, Optional
 
@@ -28,6 +31,16 @@ from playwright.sync_api import (
     Page,
     TimeoutError as PWTimeoutError,
     sync_playwright,
+)
+
+from events import (
+    EventKind,
+    EventSink,
+    ProgressCallback,
+    RowCallback,
+    ScraperEvent,
+    StructuredLogger,
+    configure_logging,
 )
 
 from parsers import (
@@ -41,14 +54,58 @@ from parsers import (
     parse_uploaded_at_from_html,
     parse_username_from_html,
     parse_video_url_from_html,
+    parse_thumbnail_from_html,
+    parse_music_id_from_html,
+    parse_reel_id_from_url,
+    parse_profile_card_from_html,
 )
 
 # ----------------------------------------------------------------------------
 # Constants
 # ----------------------------------------------------------------------------
 
-APP_DIR = Path(__file__).resolve().parent
+# When frozen (PyInstaller onefile) `__file__` points into the _MEIPASS temp
+# extraction dir, so state/results must live NEXT TO the exe instead — else
+# cookies are "lost" every launch and results vanish on exit.
+APP_DIR = (
+    Path(sys.executable).resolve().parent
+    if getattr(sys, "frozen", False)
+    else Path(__file__).resolve().parent
+)
+LOG = StructuredLogger("reelminner.engine")
+
+
+def _now_iso() -> str:
+    return datetime.now(timezone.utc).isoformat()
+
+
 DEFAULT_STATE_FILE = APP_DIR / "storage_state.json"
+
+
+def find_bundled_browsers() -> Optional[Path]:
+    """Locate Playwright browser binaries shipped next to the app.
+
+    The dev checkout uses the user cache (~/.cache/ms-playwright or
+    %LOCALAPPDATA%\\ms-playwright); a built/installed app ships its own
+    ``ms-playwright`` folder (onedir layout: next to the exe, or inside the
+    PyInstaller ``_internal`` data dir). Returns the first folder found.
+    """
+    candidates: List[Path] = []
+    if getattr(sys, "frozen", False):
+        exe_dir = Path(sys.executable).resolve().parent
+        candidates.append(exe_dir / "ms-playwright")
+        candidates.append(exe_dir / "_internal" / "ms-playwright")
+    candidates.append(Path(__file__).resolve().parent / "ms-playwright")
+    for cand in candidates:
+        if cand.is_dir():
+            return cand
+    return None
+
+
+_BUNDLED_BROWSERS = find_bundled_browsers()
+if _BUNDLED_BROWSERS is not None:
+    # Must be in place before Playwright computes browser paths at launch.
+    os.environ.setdefault("PLAYWRIGHT_BROWSERS_PATH", str(_BUNDLED_BROWSERS))
 
 # Look like a real desktop Chrome to reduce bot-detection friction.
 USER_AGENT = (
@@ -99,6 +156,16 @@ class ReelData:
     video_url: str = ""
     status: str = "ok"
     is_original_audio: bool = False
+    # --- fields added in discovery Phase 1 (technically reliable sources) ---
+    scrape_ts: str = ""
+    reel_id: str = ""
+    profile_url: str = ""
+    music_id: str = ""
+    thumbnail: str = ""
+    is_verified: bool = False
+    full_name: str = ""
+    bio: str = ""
+    reels_count: str = ""
 
     def to_dict(self) -> dict:
         return asdict(self)
@@ -120,6 +187,15 @@ class ReelData:
             "video_url",
             "status",
             "is_original_audio",
+            "scrape_ts",
+            "reel_id",
+            "profile_url",
+            "music_id",
+            "thumbnail",
+            "is_verified",
+            "full_name",
+            "bio",
+            "reels_count",
         ]
 
 
@@ -178,7 +254,7 @@ def export_excel(results: List[ReelData], path: str | Path) -> None:
 # ----------------------------------------------------------------------------
 
 
-class InstagramReelScraper:
+class Reelminner:
     def __init__(
         self,
         state_file: str | Path = DEFAULT_STATE_FILE,
@@ -186,12 +262,16 @@ class InstagramReelScraper:
         workers: int = 3,
         delay: float = 2.0,
         log: Optional[Callable[[str], None]] = None,
+        event_sink: Optional[EventSink] = None,
+        proxy: Optional[dict] = None,
     ):
         self.state_file = Path(state_file)
         self.headless = headless
         self.workers = max(1, int(workers))
         self.delay = max(0.0, float(delay))
-        self.log = log or (lambda msg: print(msg))
+        self.log = log or (lambda msg: (print(msg), LOG.info(msg)))
+        self._event_sink = event_sink
+        self._proxy = proxy
         self._stop = threading.Event()
 
     # ------------------------------------------------------------------ #
@@ -292,6 +372,7 @@ class InstagramReelScraper:
 
             browser = p.chromium.launch(headless=False, args=BROWSER_ARGS)
             context = browser.new_context(
+                proxy=self._proxy,
                 **ctx_opts,
                 user_agent=USER_AGENT,
                 viewport={"width": 1280, "height": 900},
@@ -364,7 +445,9 @@ class InstagramReelScraper:
         progress_cb: Optional[Callable[[int, int], None]] = None,
         row_cb: Optional[Callable[[ReelData], None]] = None,
         with_profiles: bool = False,
+        event_sink: Optional[EventSink] = None,
     ) -> List[ReelData]:
+        event_sink = event_sink or getattr(self, "_event_sink", None)
         """
         Scrape every URL. `workers` parallel browser windows are used, one
         URL at a time each, re-using the saved user session (cookies).
@@ -387,6 +470,8 @@ class InstagramReelScraper:
                 q.put(u)
 
         total = q.qsize()
+        if event_sink:
+            event_sink.emit(ScraperEvent(EventKind.JOB_START, {"total": total}))
         if total == 0:
             return results
 
@@ -410,6 +495,7 @@ class InstagramReelScraper:
                         headless=self.headless, args=BROWSER_ARGS
                     )
                     context = browser.new_context(
+                        proxy=self._proxy,
                         storage_state=str(self.state_file)
                         if self.state_file.exists()
                         else None,
@@ -437,6 +523,14 @@ class InstagramReelScraper:
                             progress_cb(len(results), total)
                         if row_cb:
                             row_cb(data)
+                        if event_sink:
+                            event_sink.emit(ScraperEvent(EventKind.ROW, data.to_dict()))
+                            event_sink.emit(
+                                ScraperEvent(
+                                    EventKind.PROGRESS,
+                                    {"done": len(results), "total": total},
+                                )
+                            )
                         fail_streak = fail_streak + 1 if data.status != "ok" else 0
                         wait = (
                             self.delay
@@ -470,6 +564,7 @@ class InstagramReelScraper:
                 with sync_playwright() as p:
                     browser = p.chromium.launch(headless=self.headless, args=BROWSER_ARGS)
                     context = browser.new_context(
+                        proxy=self._proxy,
                         storage_state=(
                             str(self.state_file) if self.state_file.exists() else None
                         ),
@@ -484,7 +579,7 @@ class InstagramReelScraper:
                             self.log(f"    profile -> @{d.username}")
                             page = context.new_page()
                             try:
-                                d.followers = self._scrape_profile(page, d.username)
+                                d.followers = self._scrape_profile(page, d)
                             finally:
                                 page.close()
                             if row_cb:
@@ -504,8 +599,11 @@ class InstagramReelScraper:
     # Single page scrape
     # ------------------------------------------------------------------ #
 
-    def _scrape_profile(self, page: Page, username: str) -> str:
-        """Fetch @username's profile and return the followers count string."""
+    def _scrape_profile(self, page: Page, d: ReelData) -> str:
+        """Fetch the profile for ``d.username`` and enrich ``d`` in place."""
+        username = d.username
+        if not username:
+            return ""
         url = f"https://www.instagram.com/{username}/"
         try:
             page.goto(url, wait_until="domcontentloaded", timeout=60000)
@@ -525,6 +623,11 @@ class InstagramReelScraper:
             except Exception:
                 html = ""
             followers = parse_followers_from_html(html)
+            card = parse_profile_card_from_html(html)
+            d.full_name = card.get("full_name", "")
+            d.bio = card.get("bio", "")
+            d.is_verified = bool(card.get("is_verified", False))
+            d.reels_count = card.get("reels_count", "")
             if followers:
                 return followers
             # DOM fallback: title attribute (e.g. "35K") on the followers link
@@ -723,6 +826,14 @@ class InstagramReelScraper:
         d.caption = parse_caption_from_html(html)
         d.uploaded_at = parse_uploaded_at_from_html(html)
         d.video_url = parse_video_url_from_html(html)
+
+        # --- derived / enriched fields (discovery Phase 1) ---
+        d.reel_id = parse_reel_id_from_url(page.url)
+        if d.username:
+            d.profile_url = f"https://www.instagram.com/{d.username}/"
+        d.thumbnail = parse_thumbnail_from_html(html)
+        d.music_id = parse_music_id_from_html(html)
+        d.scrape_ts = _now_iso()
         return d
 
     # ------------------------------------------------------------------ #
@@ -849,7 +960,7 @@ def main() -> None:
     )
     args = parser.parse_args()
 
-    scraper = InstagramReelScraper(
+    scraper = Reelminner(
         state_file=args.state,
         headless=args.headless,
         workers=args.workers,

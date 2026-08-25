@@ -9,8 +9,8 @@ if not exist "%ISCC%" (
     echo   winget install --id JRSoftware.InnoSetup -e
     exit /b 1
 )
-"%ISCC%" "%~dp0InstagramReelScraper.iss"
+"%ISCC%" "%~dp0Reelminner.iss"
 if errorlevel 1 exit /b 1
 echo.
-echo Installer built: dist\InstagramReelScraper-Setup.exe
+echo Installer built: dist\Reelminner-Setup.exe
 endlocal

@@ -231,3 +231,85 @@ def parse_counts_from_html(page_html: str) -> dict:
         "plays": num(r'"play_count"\s*:\s*(\d+)')
         or num(r'"video_play_count"\s*:\s*(\d+)'),
     }
+
+
+# ---------------------------------------------------------------------------
+# Additive profile / media parsers (Reelminner discovery Phase 1).
+# All pure & dependency-free. They never raise; on a miss they return "" (or
+# False / an empty dict) so engine behavior is unchanged when data is missing.
+# ---------------------------------------------------------------------------
+
+REEL_ID_RE = re.compile(r"/(?:reel|reels|p|tv)/([A-Za-z0-9_-]+)")
+
+
+def parse_reel_id_from_url(url: Optional[str]) -> str:
+    """Extract the Instagram shortcode (reel id) from a reel URL."""
+    if not url:
+        return ""
+    m = REEL_ID_RE.search(url)
+    return m.group(1) if m else ""
+
+
+def parse_thumbnail_from_html(page_html: str) -> str:
+    """Best-effort thumbnail URL from ``og:image``."""
+    try:
+        m = re.search(
+            r'<meta[^>]+property=["\']og:image["\'][^>]+content=["\']([^"\']+)["\']',
+            page_html,
+            re.IGNORECASE,
+        )
+        if m:
+            return m.group(1)
+    except Exception:
+        pass
+    return ""
+
+
+def parse_music_id_from_html(page_html: str) -> str:
+    """Extract the audio asset id from ``music_asset_info`` JSON."""
+    try:
+        m = re.search(r'"audio_asset_id"\s*:\s*"([^"]+)"', page_html)
+        if m:
+            return m.group(1)
+    except Exception:
+        pass
+    return ""
+
+
+def parse_profile_card_from_html(page_html: str) -> dict:
+    """Extract profile-level fields from a profile page HTML.
+
+    Returns keys: ``full_name``, ``bio``, ``is_verified`` (bool),
+    ``reels_count`` (str). Best-effort: any field not found is left empty / False.
+    """
+    out: dict = {
+        "full_name": "",
+        "bio": "",
+        "is_verified": False,
+        "reels_count": "",
+    }
+    if not page_html:
+        return out
+    try:
+        desc = meta_content(page_html, "name", "description")
+        if desc:
+            # counts: "X Followers, Y Following, Z Posts - bio"
+            cm = re.search(r"([\d.,KkMm]+)\s*(?:Posts|reels)", desc, re.IGNORECASE)
+            if cm:
+                out["reels_count"] = cm.group(1)
+            bm = re.search(r"\s-\s+(.+)$", desc)
+            if bm:
+                out["bio"] = bm.group(1).strip()
+        # display name from og:title ("Name • Instagram photos and videos")
+        t = meta_content(page_html, "property", "og:title")
+        if t:
+            name = t.replace(" • Instagram photos and videos", "").strip()
+            name = re.sub(r"\s*\(@[^)]*\)\s*$", "", name)
+            out["full_name"] = name
+        # verified flag (best effort)
+        vm = re.search(r'"is_verified"\s*:\s*(true|false)', page_html)
+        if vm:
+            out["is_verified"] = vm.group(1).lower() == "true"
+    except Exception:
+        pass
+    return out

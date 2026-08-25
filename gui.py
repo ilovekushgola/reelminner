@@ -14,6 +14,7 @@ Run:  python gui.py
 from __future__ import annotations
 
 import queue
+import sys
 import threading
 import webbrowser
 from datetime import datetime
@@ -31,12 +32,12 @@ except Exception:
 
 from scraper import (
     DEFAULT_STATE_FILE,
-    InstagramReelScraper,
     export_excel,
     export_json,
     normalize_reel_url,
     write_csv,
 )
+from service import ScraperService
 
 # Design tokens — single source of truth (theme.py). No hardcoded colors below.
 from theme import (
@@ -58,7 +59,13 @@ from theme import (
     ZEBRA_EVEN,
 )
 
-APP_DIR = Path(__file__).resolve().parent
+# Frozen (PyInstaller onefile): `__file__` = _MEIPASS temp dir; results must
+# live next to the exe so exported files survive exit.
+APP_DIR = (
+    Path(sys.executable).resolve().parent
+    if getattr(sys, "frozen", False)
+    else Path(__file__).resolve().parent
+)
 RESULTS_DIR = APP_DIR / "results"
 RESULTS_DIR.mkdir(exist_ok=True)
 
@@ -85,7 +92,7 @@ class ReelScraperApp(tk.Tk):
 
         # Thread -> GUI communication (log lines, progress, results)
         self._q: "queue.Queue[tuple]" = queue.Queue()
-        self._scraper = InstagramReelScraper(log=self._log_from_thread)
+        self._scraper = ScraperService(log=self._log_from_thread)
         self._running = False
         self._results = []
         self._row_seq = 0
@@ -813,9 +820,10 @@ class ReelScraperApp(tk.Tk):
 
 if __name__ == "__main__":
     import argparse
+    import os
     import sys
 
-    parser = argparse.ArgumentParser(prog="InstagramReelScraper")
+    parser = argparse.ArgumentParser(prog="Reelminner")
     parser.add_argument(
         "--selftest",
         action="store_true",
@@ -826,8 +834,22 @@ if __name__ == "__main__":
         lines = [
             "SELFTEST OK",
             f"frozen={'yes' if getattr(sys, 'frozen', False) else 'no'}",
-            "app=InstagramReelScraper",
+            "app=Reelminner",
+            f"app_dir={APP_DIR}",
+            f"results_dir={RESULTS_DIR} (exists={RESULTS_DIR.is_dir()})",
+            f"state_file={DEFAULT_STATE_FILE} (exists={DEFAULT_STATE_FILE.is_file()})",
+            f"playwright_browsers_path={os.environ.get('PLAYWRIGHT_BROWSERS_PATH', '(default user cache)')}",
         ]
+        # Browser resolution check — proves a real scrape can launch a browser.
+        try:
+            from playwright.sync_api import sync_playwright
+
+            with sync_playwright() as p:
+                exe = p.chromium.executable_path
+                lines.append(f"chromium_executable={exe}")
+                lines.append(f"chromium_present={Path(exe).is_file()}")
+        except Exception as exc:  # noqa: BLE001 - report, don't crash
+            lines.append(f"browser_resolve_error={exc!r}")
         report = Path("selftest_report.txt")
         try:
             report.write_text("\n".join(lines), encoding="utf-8")

@@ -4,6 +4,12 @@ results/
 *.csv
 *.xlsx
 *.json
+
+# Phase 2 backend persistence (SQLite + JSONL result store)
+data/
+
+# keep the MCP client config so it ships with the repo
+!.mcp.json
 selftest_report.txt
 
 # build artifacts

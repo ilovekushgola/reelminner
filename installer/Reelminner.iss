@@ -1,20 +1,20 @@
 ; Instagram Reel Scraper — Inno Setup installer script
-; Build: run install.bat (or ISCC.exe InstagramReelScraper.iss)
+; Build: run install.bat (or ISCC.exe Reelminner.iss)
 
 #define MyAppName "Instagram Reel Scraper"
 #define MyAppVersion "1.0.0"
 #define MyAppPublisher "IRS Tools"
-#define MyAppExeName "InstagramReelScraper.exe"
+#define MyAppExeName "Reelminner.exe"
 
 [Setup]
 AppId={{8F2A6D1E-3C5B-4E7A-9B4F-5F1E0A2D9C31}
 AppName={#MyAppName}
 AppVersion={#MyAppVersion}
 AppPublisher={#MyAppPublisher}
-DefaultDirName={autopf}\InstagramReelScraper
+DefaultDirName={autopf}\Reelminner
 DefaultGroupName={#MyAppName}
 OutputDir=..\dist
-OutputBaseFilename=InstagramReelScraper-Setup
+OutputBaseFilename=Reelminner-Setup
 Compression=lzma2
 SolidCompression=yes
 WizardStyle=modern
@@ -29,7 +29,8 @@ Name: "english"; MessagesFile: "compiler:Default.isl"
 Name: "desktopicon"; Description: "Create a desktop shortcut"; GroupDescription: "Additional icons:"
 
 [Files]
-Source: "..\dist\{#MyAppExeName}"; DestDir: "{app}"; Flags: ignoreversion
+; Onedir build: install the whole app folder (exe + _internal + browsers)
+Source: "..\dist\Reelminner\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
 Source: "..\README.md"; DestDir: "{app}"; Flags: ignoreversion
 
 [Icons]
